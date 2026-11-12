@@ -23,7 +23,7 @@ When prose and the script that produced a table disagree, reproduction of that t
 
 Known mismatches at v0.2:
 
-1. Section 3.11.2 says genuine self-exhaustion is "no expulsions for the final 2000+ steps." `classify_exhaustion` in `small_n_utils.py` uses `min_silence=500` (no reconvergence to the adaptive threshold, and at least 500 steps after the last expulsion). Table 10 was produced by `exp_small_n_viability.py`, so **C-T10 uses `min_silence=500`**. A 2000-step silence predicate, if scored, is labeled `D7-prose` and is not used to pass or fail Table 10.
+1. Section 3.11.2 says genuine self-exhaustion is "no expulsions for the final 2000+ steps." `classify_exhaustion` in `small_n_utils.py` uses `min_silence=500` (no reconvergence to the adaptive threshold, and at least 500 steps after the last expulsion). Table 10 was produced by `exp_small_n_viability.py`, so **C-T10 uses `min_silence=500`**. A second predicate, **D7-paper**, uses the same D7 conditions with `min_silence=2000` (section 3.11.2). Simulation exports `viability_D7_paper` on every Table 10 trial so the mismatch can be reported empirically. D7-paper is never used to pass or fail C-T10.
 2. Table 11's caption says convergence is modal agreement >= 0.95, but `exp_small_n_phase_boundary.py` uses `adaptive_unanimity_threshold(N)` sustained for 10 steps. **C-T11 uses the script.** At N >= 20 the two coincide; at N < 20 they do not (at N=5 the ceiling is 0.80, so 0.95 is impossible).
 
 ## Definitions
@@ -52,7 +52,7 @@ Known mismatches at v0.2:
 2. pct_consumed < 0.50,
 3. n_expulsions >= 1.
 
-Cooldown is 5. Trigger is Use 2 below. **D7-prose** replaces (1) with "no expulsions in the final 2000+ steps" and is not the Table 10 predicate.
+Cooldown is 5. Trigger is Use 2 below. **D7-paper** is the same three conditions with `min_silence=2000`, matching section 3.11.2. It is reported on every Table 10 trial and is not the Table 10 predicate.
 
 A **trial** is one seeded run: the tuple (script, variant, N, gamma, seed).
 
@@ -80,7 +80,7 @@ Official seeds: `42 + r * 1000`. Variant is AC unless noted. Reproduction pass i
 - N=50: 0% at 1.01, 10% (2/20) at 1.02, 90% (18/20) at 1.03, 100% (20/20) at >= 1.04.
 - N=100 and N=200: 0% at <= 1.02, 100% at >= 1.03.
 
-Sharpening passes if that pattern holds (fuzzy interval at N=50, step between 1.02 and 1.03 at N >= 100). Also check published median t95 at gamma=1.05: 88, 98, 102 for N=50, 100, 200. Table 2b as printed stops at N=200. The README and Section 3.11.3 mention N=500; that is a separate run to confirm, not numbers already in Table 2b. C-T2b is the first ensemble target for the invariant-boundary claim, not C-T2.
+Sharpening passes if that pattern holds (fuzzy interval at N=50, step between 1.02 and 1.03 at N >= 100). Also check published median t95 at gamma=1.05: 88, 98, 102 for N=50, 100, 200. Table 2b as printed stops at N=200. The README and Section 3.11.3 mention N=500, but there is no official no-expulsion sweep at N=500 in the published repo; see C-inv-full. C-T2b is the first ensemble target for the invariant-boundary claim, not C-T2.
 
 **C-T10 (reproduce Table 10).** Script `exp_small_n_viability.py`: AC and RA, N in {5, 10, 15, 20, 25, 30, 35, 40}, gamma in {1.05, 1.5, 2.0}, 20 seeds, 5000 steps, Use 2, cooldown 5. Viability index = fraction of trials satisfying D7. Pass iff each cell, as k/20, matches the published percent:
 
@@ -95,7 +95,11 @@ The qualitative "generative window around N=15 to 50" is described only after th
 
 **C-T11 (small-N phase boundary, if run).** Script `exp_small_n_phase_boundary.py`, D3. gamma-star = lowest tested gamma with >= 50% convergence. Published: N=5..40, gamma-star 1.03, 1.03, 1.05, 1.04, 1.03, 1.03, 1.03, 1.03, paper range [1.03, 1.05].
 
-**C-inv-full (phase boundary invariant for N=5 to 500).** Composite: C-T11 for N=5 to 40, C-T2b for N=50 to 200, and a named official no-expulsion sweep for N=500 if and when Simulation runs it. C-T2b alone is not a pass on N=5 to 500.
+**C-inv-full (phase boundary invariant for N=5 to 200, first milestone).** Composite: C-T11 for N=5 to 40 and C-T2b for N=50 to 200. C-T2b alone is not a pass on N=5 to 500, and is not a pass on N=5 to 200 without C-T11.
+
+There is no official no-expulsion gamma sweep at N=500 in the published repo (`phase_boundary_large_N.py` and `reproduce_table_2b.py` both stop at N=200). The N=500 scripts (`exp1_ultralong_n500.py`, `unanimity_trigger_N_gamma.py`, `self_exhaustion_interpolation.py`) are unanimity-triggered or self-exhaustion runs, not the phase-boundary sweep. The N=5 to 500 sentence in the paper (Appendix G, and 3.11.3 citing 3.2) is therefore not backed by a first-milestone official table. This contract does not invent a substitute table, and does not treat an N=500 run as C-T2b.
+
+After official C-T2, C-T2b, C-T10, and Table 11 runs, Simulation may run a clearly labeled **extension** at N=500 with the Table 2b protocol (AC, no expulsion, 20 seeds `42+r*1000`, 800 steps, same gamma grid, k=20). That extension is not an official published table. It is scored, if at all, as a separate labeled claim, never as C-T2b.
 
 **C-T1 (catharsis means, if run).** Table 1, 10 runs, gamma=2.0, tau=8.0, 600 steps. Ensemble mean fractional_drop (D6) matches published LM 5.6%, AC 29.6%, RL 6.3%, RA 36.7% after rounding to the printed 1 decimal. Not part of the Table 2 / 2b first delivery.
 
@@ -135,7 +139,7 @@ eval/summaries/<ensemble_id>.json   # optional claimed-vs-reproduced notes
 **trial JSON, required metadata**
 
 - contract_version, trial_id, ensemble_id, script, source_sha, draft
-- variant (`LM` | `AC` | `RL` | `RA`), source_mode (`object` | `status`), spread_mode (`linear` | `attention`)
+- variant (`LM` | `AC` | `RL` | `RA`), source_mode (`object` | `status`), spread_mode (`linear` | `attention`). Official VARIANT_MAP: LM = (object, linear), AC = (object, attention), RL = (status, linear), RA = (status, attention). These two fields must match the map for the stated variant.
 - N, k, rewire_prob, alpha, gamma, aggression_decay
 - expulsion_mode (`none` | `threshold` | `unanimity_adaptive`)
 - expulsion_threshold (null if none), unanimity_threshold (null if none), unanimity_cooldown (null if none)
