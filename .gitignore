@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Black reference checkout for eval/judge tests
+eval/.cache/

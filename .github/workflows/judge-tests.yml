@@ -1,0 +1,44 @@
+name: Judge Tests
+
+on:
+  pull_request:
+    paths:
+      - 'eval/**'
+      - '.github/workflows/judge-tests.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'eval/**'
+      - '.github/workflows/judge-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Judge tests
+    runs-on: ubuntu-latest
+    env:
+      BLACK_SHA: 89e7bbb57db62e3c830a8ca672a0805080df3970
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install numpy
+        run: python -m pip install numpy
+
+      # Black's code is read at the pinned SHA, never copied into this repo.
+      # black_reference.py also checks the SHA-256 of the two files it reads.
+      - name: Check out Black's simulation at the pinned SHA
+        run: |
+          git clone --quiet https://github.com/maxwell-black/mimetic-desire-simulation.git eval/.cache/mimetic-desire-simulation
+          git -C eval/.cache/mimetic-desire-simulation checkout --quiet "$BLACK_SHA"
+
+      - name: Run tests
+        env:
+          REQUIRE_OFFICIAL: '1'
+        run: python -W error::ResourceWarning -m unittest discover -s eval/judge -p 'test_*.py' -v
