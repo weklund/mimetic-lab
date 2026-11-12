@@ -1,6 +1,6 @@
 # Claim map: scheme and rules
 
-Status: draft v0.2.4, 2026-11-12. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
+Status: draft v0.2.5, 2026-11-12. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
 
 ## Epistemic limit
 
@@ -14,9 +14,9 @@ When this scheme was written (vault checked 2026-11-11, commit 62e9777), the Sec
 
 | Field | Meaning |
 |---|---|
-| `id` | Stable ID. Prefix: `G` Girard text, `B` Black model, `S` Sack model, `O` other literature, `W` Wes. Never reuse an ID. |
+| `id` | Stable ID. Prefix: `G` Girard text, `B` Black model, `S` Sack model, `O` other literature, `L` the lab's own model (`eval/models/`), `W` Wes. Never reuse an ID. |
 | `priority` | `P0` needed by a first milestone, `P1` supports a milestone, `P2` later. |
-| `milestone` | `M1-black-phase-boundary`, `M2-sack-lean`, or `later`. |
+| `milestone` | `M1-black-phase-boundary`, `M2-sack-lean`, `M3-literature-map`, `M4-minimal-model`, or `later`. Definitions of done are in `ROADMAP.md`. |
 | `kind` | `textual` (claim about what a text says), `empirical` (about the world), `model` (about a stated model), `theorem` (provable in a stated formal system). |
 | `statement` | Wording precise enough to pass or fail. |
 | `source` | Work, edition, page or section. Mark `locator: incomplete` when not checked against the primary text. |
@@ -32,3 +32,5 @@ When this scheme was written (vault checked 2026-11-11, commit 62e9777), the Sec
 2. A passing reproduction or proof upgrades only that `B`, `S`, or `O` claim. It never upgrades a `G` claim.
 3. Quotes come only from sources someone on the lab actually opened; secondhand page numbers are marked `via`. Private journal wording is not quoted on the public map until Wes says so.
 4. Change log entries go at the bottom of `claims.yaml`.
+5. A claim drafted from an assistant's memory is `locator-incomplete`, with a `review_flags` entry saying so, until a person opens the source. Its statement may plan work; it is not evidence.
+6. An `L` claim states its pass marks before the run, in `assumptions` or `review_flags`, and records the result whatever it is.
