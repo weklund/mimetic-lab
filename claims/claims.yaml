@@ -1,0 +1,385 @@
+# Mimetic Lab claim map v0.1.1 (2026-11-11). Scheme: claims/README.md
+# No em or en dashes in this file by convention.
+
+milestones:
+  M1-black-phase-boundary:
+    target: B1
+    needs: [G4, G3, B1, B2, B3]
+  M2-sack-lean:
+    target: S1
+    needs: [G1, S1]
+    next: [S3, S4, S2]
+
+claims:
+
+  - id: G1
+    title: Desire is borrowed from a model
+    priority: P0
+    milestone: M2-sack-lean
+    kind: textual
+    statement: >
+      Girard claims that for at least some objects, a subject desires the object
+      because a model (mediator) desires it, not because of the object's intrinsic
+      qualities.
+    source:
+      - "Girard, Violence and the Sacred, trans. Gregory (JHU 1977), p. 145, via Fleming, Rene Girard: Violence and Mimesis (Polity 2004), ch. 1: 'the subject desires the object because the rival desires it.'"
+      - "Girard, Deceit, Desire, and the Novel (JHU 1965), ch. 1, pp. 2-3 (Don Quixote and Sancho), via Fleming ch. 1."
+    locator: incomplete (secondhand page numbers; check against print)
+    assumptions:
+      - Desire can be individuated by object and attributed to a model.
+      - The claim is not universal; Girard grants appetite and need (VS p. 146 via Fleming).
+    counterexample: >
+      Textual: passages where Girard restricts mimetic desire to a narrow domain
+      that excludes the cases the lab models. Empirical (P2): object choice that is
+      statistically independent of observed model choice once intrinsic object
+      properties are controlled.
+    formalization_delta:
+      Sack-2021: >
+        Drops degree and intensity of desire, multiple models, and appetite. Adds that
+        every node has exactly one mediator and exactly one object, and that objects
+        are themselves nodes (persons and things are not distinguished; Sack note 7).
+      Black-2026: >
+        Desire is a prestige-weighted average over neighbors' desire vectors.
+        Imitation is continuous and partial (alpha), not all or nothing.
+    status: locator-incomplete
+
+  - id: G2
+    title: Internal mediation breeds rivalry, external mediation does not
+    priority: P2
+    milestone: later
+    kind: textual
+    statement: >
+      When the distance (social, spiritual, spatial) between subject and mediator is
+      large, imitation does not produce rivalry; when it is small, the mediator
+      becomes a rival for the same object.
+    source:
+      - "Girard, Deceit, Desire, and the Novel, p. 9, via Fleming ch. 1."
+    locator: incomplete
+    assumptions: [Distance is measurable or at least orderable.]
+    counterexample: Sustained imitation with small distance and no rivalry, or rivalry under large distance.
+    formalization_delta:
+      Sack-2021: Drops distance entirely. Every mediation link has the same force.
+      Black-2026: Prestige weights exist but no distance threshold separates external from internal mediation.
+    status: locator-incomplete
+
+  - id: G3
+    title: Shared desire for a non-shareable object generates hostility
+    priority: P1
+    milestone: M1-black-phase-boundary
+    kind: textual
+    statement: >
+      When subject and model desire the same object and it cannot or will not be
+      shared, mutual hostility arises, and the hostility does not depend on prior
+      scarcity.
+    source:
+      - "Girard, Violence and the Sacred, pp. 145-147, via Fleming ch. 1."
+    locator: incomplete
+    assumptions: [Rivalrous objects exist in the population.]
+    counterexample: Convergent desire on a rivalrous object with no rise in hostility.
+    formalization_delta:
+      Black-2026: >
+        Encoded as an input rule, not tested: shared desire on one of 5 rivalrous
+        objects adds a fixed 0.2 aggression increment (Appendix A). The model cannot
+        falsify G3; it assumes it.
+    status: locator-incomplete
+
+  - id: G4
+    title: Snowball of conflictual mimesis to unanimity
+    priority: P0
+    milestone: M1-black-phase-boundary
+    kind: textual
+    statement: >
+      Once objects drop out and mimetic hostility is intense, hostility transmits
+      mimetically, the pull of a target grows with the number already polarized
+      against it, and the community ends up unified against a single individual.
+    source:
+      - "Girard, Things Hidden Since the Foundation of the World (Stanford 1987), Book I ch. 1, p. 26, quoted in Black 2026 s1.2: 'Since the power of mimetic attraction multiplies with the number of those polarized, it is inevitable that at one moment the entire community will find itself unified against a single individual.'"
+      - "Girard, Violence and the Sacred, ch. 6, p. 161 (monstrous double), via Black s1.2."
+    locator: incomplete (quote via Black; verify p. 26 in print)
+    assumptions:
+      - A prior crisis has populated the field with competing targets.
+      - Agents imitate hostility, not only desire.
+      - '"Multiplies" has a definite mathematical reading (see delta).'
+    counterexample: >
+      Textual: none intended; this is the claim models test. Model level: a
+      faithful formalization in which hostility is mimetic and recruitment grows
+      with polarization, yet no single-target unanimity forms.
+    formalization_delta:
+      Black-2026: >
+        Weakens "inevitable" to "above a gamma threshold, within this model family".
+        Reads "multiplies" as individual salience sharpening (attention weight
+        proportional to h^gamma) and adds per-agent throughput conservation, which
+        Girard never states. Black s4.1 concedes that "multiplies with the number of
+        those polarized" may instead mean group-level recruitment, which the AC
+        operator does not model. The object-to-hostility transition is given, not
+        endogenous (s4.6). Unanimity is measured as modal-target agreement >= 0.95
+        for 10 steps, not total participation.
+      Paes-2025: >
+        Victim choice is programmed (accusation targets isolated agents first;
+        expulsion fires once more than a tenth are marked), so unanimity is not
+        emergent from mimesis alone.
+    status: locator-incomplete
+
+  - id: G5
+    title: The victim is arbitrary
+    priority: P2
+    milestone: later
+    kind: textual
+    statement: >
+      The victim's selection is not explained by guilt; Girard also holds that
+      victims tend to bear "signs" (marginality, abnormality) that attract selection.
+    source:
+      - "Girard, The Scapegoat (JHU 1986), ch. 2 'Stereotypes of Persecution', pp. 12-23 (third stereotype: victim-selection signs). Page range from search snippet only."
+    locator: incomplete
+    assumptions: [Arbitrary means not caused by guilt, not necessarily random.]
+    counterexample: Collective violence where selection is reliably explained by victim's prior conduct.
+    formalization_delta:
+      Black-2026: >
+        Operationalizes arbitrariness as no difference in degree, betweenness, or
+        clustering between victims and others (AC, n=288, s3.7). In RA, victims'
+        lower status is produced by targeting, so "signs" are endogenous. This
+        tests a structural reading, not Girard's "signs" as pre-existing marks.
+    tension: Girard's arbitrariness and his signs-of-the-victim stereotype pull in different directions; the lab must pick one reading per test.
+    status: locator-incomplete
+
+  - id: G6
+    title: Expulsion restores peace
+    priority: P2
+    milestone: later
+    kind: textual
+    statement: Expelling or killing the single victim ends the crisis and founds a durable order.
+    source: ["Girard, Violence and the Sacred, chs. 1-4; Things Hidden Book I ch. 1. Locators not checked."]
+    locator: incomplete
+    assumptions: [Unanimity precedes expulsion.]
+    counterexample: Unanimous expulsion followed by immediate resumption of crisis without ritual.
+    formalization_delta:
+      Black-2026: >
+        Weakens to transient catharsis: 95% tension drop, then reconvergence by
+        about step 50 (s3.6, tau = 500). Durable peace requires the sacred, which
+        the model lacks (s4.3). Self-exhaustion only in a window around N = 15 to 50.
+    status: locator-incomplete
+
+  - id: G7
+    title: Texts of persecution share four stereotypes
+    priority: P2
+    milestone: later
+    kind: textual
+    statement: Persecution texts show crisis, crimes that erase differences, victim-selection signs, and collective violence.
+    source: ["Girard, The Scapegoat, ch. 2, pp. 12-23 (search snippet; verify)."]
+    locator: incomplete
+    assumptions: [A corpus of persecution texts can be coded blind.]
+    counterexample: A coded corpus where the four co-occur no more than chance.
+    status: locator-incomplete
+
+  - id: B1
+    title: Black phase boundary (reproduction target)
+    priority: P0
+    milestone: M1-black-phase-boundary
+    kind: model
+    stands_in_for: G4
+    statement: >
+      In Black's AC variant (girard_2x2_v3.py, source=object, spread=attention),
+      with no expulsion, Watts-Strogatz rewire 0.15, k = max(6, min(floor(0.12N), 20))
+      rounded down to even, alpha = 0.15, decay 0.03, 800 steps, seeds 42 + 1000r for
+      r = 0..19, and convergence defined as modal-target agreement >= 0.95 for 10
+      consecutive steps: convergence rate is 0% for gamma <= 1.01 and 100% for
+      gamma >= 1.04 at N = 50, 100, 200, with the transition inside [1.02, 1.03]
+      (N=50: 10% at 1.02, 90% at 1.03; N=100 and 200: 0% at 1.02, 100% at 1.03).
+    source:
+      - "Black, draft v18 (Feb 2026), s3.2 Table 2b, paper/paper_draft_18_github.md in github.com/maxwell-black/mimetic-desire-simulation (HEAD 89e7bbb, 2026-04-01)."
+      - "Raw: phase_boundary_large_N_results.txt; script: reproduce_table_2b.py."
+      - "Published: Contagion 33 (2026), doi 10.14321/contagion.33.0195 (paywalled; not opened)."
+    locator: complete for the GitHub draft; published version not checked
+    assumptions:
+      - Exact operator: a_i(j) = h_i(j)^gamma / sum_k h_i(k)^gamma; pull_i(j) = a_i(j) H_i.
+      - Rivalry sourcing from 8 objects (5 rivalrous), increment 0.2.
+      - Finite horizon of 800 steps (censoring near the boundary).
+    counterexample: >
+      A rerun of the pinned code and seeds giving any convergence at gamma <= 1.01
+      or less than 100% at gamma >= 1.04 at any of N = 50, 100, 200; or an
+      independent reimplementation from the paper's equations whose boundary moves
+      by more than one grid step (0.01).
+    sub_claims:
+      B1a: "Boundary sharpens with N (fuzzy at 50, step at 100 and 200). Same source."
+      B1b: "Robust to alpha in [0.05, 0.20] at decay 0.03 (Table 2c, 10 seeds). gamma* rises with decay: 1.10 at decay 0.10."
+      B1c: "Extension to N = 5..40 (Table 11). Uses a different gamma* definition (>= 50% of seeds) and an adaptive threshold. Not a P0 target."
+    review_flags:
+      - "gamma* has three definitions in the paper: first nonzero rate (s3.2 text), lowest gamma with 100% (Table 2c), lowest gamma with >= 50% (Table 11). The 'invariant from 5 to 500' claim mixes them."
+      - "Small N is not a clean step: at N = 5, 35% convergence at gamma = 0.95 and 50% at 1.03 (exp_small_n_phase_boundary_results.txt). Black attributes this to the 0.80 threshold."
+      - "README calls the draft v18 while Appendix B cites tag v15. Record which commit the reproduction used."
+      - "Black's bibliography misattributes 'Complex Mimetic Systems' to 'Gardin, A.' (it is Hans Weigand, Contagion 15/16, 2008, pp. 63-87), cites Paes as 'L. Paes', and cites Sack in Contagion 28 (not found; the version opened is Springer CSSSA 2020 proceedings). Do not copy locators from it."
+    formalization_delta: See G4. The boundary is a property of this operator family; Black's own Appendix G shows the softmax variant's convergence band vanishes at N >= 150.
+    status: reported-by-source
+
+  - id: B2
+    title: Linear transmission never converges
+    priority: P0
+    milestone: M1-black-phase-boundary
+    kind: model
+    stands_in_for: G4
+    statement: >
+      With gamma = 1 (LM), no run in any tested parameterization reaches the
+      convergence criterion (Table 2: peak modal 0.240; s4.6).
+    source: ["Black v18 s3.1 Tables 1 and 1b, s3.2 Table 2, s4.6 'Circularity'."]
+    assumptions: As B1.
+    counterexample: One LM run meeting the criterion under the paper's parameters.
+    formalization_delta: >
+      This is the claim Black says is not built in. It holds only for the tested
+      grid and horizon; it is not a theorem about linear averaging.
+    status: reported-by-source
+
+  - id: B3
+    title: Convexity needs throughput conservation
+    priority: P1
+    milestone: M1-black-phase-boundary
+    kind: model
+    statement: >
+      Raw pull = h^gamma (no renormalization) does not converge and collapses total
+      mass to about 9.1 (gamma = 2); a fixed-scale map C h^gamma has no stable
+      convergence regime (explodes above C_crit = 0.86 C_cal).
+    source: ["Black v18 s3.3 Table 3; Appendix D."]
+    assumptions: Hostility signals are mostly below 1 after averaging.
+    counterexample: A non-conserving convex operator that converges stably in the same model.
+    formalization_delta: Adds an assumption (per-agent conservation) that has no stated textual basis in Girard.
+    status: reported-by-source
+
+  - id: S1
+    title: Convergence of Desire (Sack Theorem 1), first Lean target
+    priority: P0
+    milestone: M2-sack-lean
+    kind: theorem
+    stands_in_for: G1
+    statement: >
+      Let N be a finite set, med : N -> N and obj : N -> N. Say (med, obj) is in
+      equilibrium if obj (med i) = obj i for every i. Then in equilibrium, any two
+      nodes in the same weakly connected component of the mediation graph
+      (equivalently, related by the equivalence closure of i ~ med i) have the
+      same object.
+    source:
+      - "Sack, Geometries of Desire, in Yang and von Briesen (eds), Proc. 2020 CSSSA, Springer 2021, pp. 217-243, doi 10.1007/978-3-030-83418-0_13, Appendix, Definitions 1-4 and Theorem 1."
+    locator: complete (appendix opened on Springer)
+    assumptions:
+      - Exactly one out mediation link and one out object link per node (Def 1).
+      - Static equilibrium; nothing about dynamics.
+    counterexample: >
+      Formally none if the proof checks. A definitional failure is possible: Def 4
+      ('cannot be partitioned into non-empty disjoint mutual mediator sets') is
+      satisfied both by a whole weak component and by its mediation cycle alone.
+      The theorem holds under either reading, so formalize via weak components and
+      note the ambiguity.
+    why_first: >
+      Smallest dependency surface: a functional graph, an equivalence closure, and
+      induction on the closure. The proof is two lines once the relation is set up,
+      so effort goes into getting definitions right, which every later Sack theorem
+      reuses (S2, S3, S4 all cite Theorem 1).
+    formalization_delta: >
+      Drops distance, rivalry, intensity, plural models, and time. 'Equilibrium' is
+      a fixed point, not an attractor; the theorem does not say any dynamics reach
+      it. Sack's own 3-agent run cycles with period 14 and never reaches
+      equilibrium (notes 5-6). The abstract's 'tendency for all agents to converge
+      on a single, universal object' is a simulation observation, not Theorem 1.
+    status: stated
+
+  - id: S2
+    title: Non-Identity of Desire (Sack Theorem 2)
+    priority: P1
+    milestone: M2-sack-lean
+    kind: theorem
+    statement: Without object self-links (obj i != i), every node of a component in equilibrium desires a node outside that component.
+    source: ["Sack 2021, Appendix, Theorem 2."]
+    assumptions: As S1, plus no self-links.
+    counterexample: Formal only.
+    status: stated
+
+  - id: S3
+    title: Equilibrium without narcissism exists iff at least two components (Sack Theorem 3)
+    priority: P1
+    milestone: M2-sack-lean
+    kind: theorem
+    statement: Without self-links, an equilibrium (obj) exists for a given med if and only if the mediation graph has at least two weak components.
+    source: ["Sack 2021, Appendix, Theorem 3."]
+    review_flags:
+      - "The sketch proves only the 'only if' direction. The 'if' direction needs a construction (component A desires a node of B and every other component desires a node of A); Lean will force it."
+    status: stated
+
+  - id: S4
+    title: Objects of desire bounded by components (Sack Theorem 5)
+    priority: P1
+    milestone: M2-sack-lean
+    kind: theorem
+    statement: In equilibrium, the number of distinct objects is at most the number of weak components of the mediation graph.
+    source: ["Sack 2021, Appendix, Theorem 5."]
+    status: stated
+
+  - id: S5
+    title: Sack dynamics reach equilibrium
+    priority: P2
+    milestone: later
+    kind: model
+    statement: Under Sack's update rule, networks reach equilibrium; in the triadic case only narcissistic equilibria exist (note 10).
+    source: ["Sack 2021, body and notes 5, 6, 10."]
+    counterexample: Sack's own 3-agent cycle (notes 5-6) already shows non-convergence for some starts.
+    status: reported-by-source
+
+  - id: O1
+    title: Paes accusation rules reduce tension at low cost
+    priority: P2
+    milestone: later
+    kind: model
+    statement: In Paes's coevolving-network ABM, removing the accusation rules lets tension saturate and kills most agents; with them tension stays low and cost falls on a few. Closure decides whether expulsion occurs; skepticism decides when.
+    source: ["Paes, 'An agent-based model of scapegoating', CoMSES 1.0.1 (pub. 2025-08-28, modified 2026-11-08); description mentions a 1.1.0 package for a JASSS submission. github.com/carlospaes120/scapegoat returned 404 on 2026-11-11."]
+    formalization_delta: Victim selection and the 10% marking threshold are programmed, so this tests consequences of scapegoating, not its emergence.
+    status: reported-by-source
+
+  - id: O2
+    title: Imitation rules are themselves imitated (Chavalarias)
+    priority: P2
+    milestone: later
+    kind: model
+    statement: In metamimetic games, agents carry bounded chains of imitation rules that are themselves modifiable; equilibrium is a 'counterfactually stable state' and dynamics are not in general reducible to replicator dynamics.
+    source: ["Chavalarias, 'Metamimetic Games', JASSS 9(2) 5, 2006 (arXiv nlin/0508006), s4.1-4.3."]
+    formalization_delta: General imitation framework; no objects of desire, rivalry, or scapegoat in the sections opened.
+    status: reported-by-source
+
+  - id: O3
+    title: Homophilic mimesis ends in disjoint cliques (Rodriguez Caballero)
+    priority: P2
+    milestone: later
+    kind: theorem
+    statement: Under psi' = -C L[G_eps(psi)] psi with G_eps linking agents whose traits differ by at most eps, the network eventually freezes into a union of complete graphs.
+    source: ["Rodriguez Caballero, 'Homophilic networks evolving by mimesis', arXiv 2008.05894 (2020), Theorem 1."]
+    review_flags:
+      - "Eq. (10) in the proof writes the decay from t_0 where Lemma 2 gives it from the interval start t_k. This looks like a gap. A later Lean target, not M2."
+    formalization_delta: Mimesis becomes linear diffusion of one scalar trait. Drops objects, rivalry, mediators. Cites Girard only for motivation.
+    status: reported-by-source
+
+  - id: O4
+    title: Complex Mimetic Systems framework (Weigand)
+    priority: P2
+    milestone: later
+    kind: textual
+    statement: Weigand proposes mimetic agents (memory of actor, action, recipient; network view of proximity, status, valuation) and a Culture Reproduction Cycle of crisis, sacrifice, reconciliation. No simulation results.
+    source: ["Weigand, 'Complex Mimetic Systems', Contagion 15/16 (2008) 63-87; girard.nl/texts_online/w/Weigand_Hans_11.pdf, ss3-4."]
+    status: reported-by-source
+
+  - id: W1
+    title: Anti-mimesis converges on the rival (Wes, hypothesis)
+    priority: P2
+    milestone: later
+    kind: model
+    statement: >
+      Candidate wording for Wes to confirm: an agent whose update rule is to
+      differ from a chosen rival still becomes increasingly similar to that rival
+      over time (the double), rather than independent of it.
+    source:
+      - "Wes, private journal 2026-10-07 (Second Brain). Paraphrase only, quote withheld pending Wes's OK."
+      - "Related Girard: monstrous double, VS p. 161 (via Black); rivals become doubles, Things Hidden / I See Satan (IS p. 22 via Fleming)."
+    assumptions: [Similarity is measured on the dimensions the agent attends to in opposing the rival.]
+    counterexample: A negative-imitation model where the agent's state decorrelates from the rival's.
+    status: stated
+    review_flags:
+      - "Needs Wes's wording and confirmation that this belongs on the program. The note is Wes wondering about a specific person, not yet a general claim. Verbatim quote withheld from the public map pending Wes's OK."
+
+changelog:
+  - "2026-11-11 v0.1: first map. Vault had no prior scheme. Black and Sack sources opened; Girard locators mostly secondhand."
+  - "2026-11-11 v0.1.1: redact W1 private-journal verbatim quote from the public map (pending Wes's OK). Status set to stated; confirmation note moved to review_flags."

@@ -1,0 +1,57 @@
+name: Lean Build
+
+on:
+  pull_request:
+    paths:
+      - 'lean/**'
+      - '.github/workflows/lean-build.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lean/**'
+      - '.github/workflows/lean-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Lean Project
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache Lake packages
+        uses: actions/cache@v4
+        with:
+          path: lean/.lake
+          key: ${{ runner.os }}-lean-${{ hashFiles('lean/lean-toolchain', 'lean/lake-manifest.json') }}
+          restore-keys: |
+            ${{ runner.os }}-lean-
+
+      # Build exactly what lake-manifest.json pins. `lake update` would re-resolve
+      # dependencies and could build something other than what is committed.
+      - name: Fetch prebuilt Mathlib
+        working-directory: lean
+        run: lake exe cache get
+
+      # The build includes SackTheorem/AxiomAudit.lean, which fails if any proved
+      # theorem depends on sorryAx or on a new axiom.
+      - name: Build Lean project
+        working-directory: lean
+        run: lake build
+
+      # Belt and braces: unproved statements must be proof_wanted, never sorry or admit.
+      - name: Reject sorry and admit
+        working-directory: lean
+        run: |
+          if grep -rnwE 'sorry|admit' --include='*.lean' SackTheorem SackTheorem.lean; then
+            echo "Found sorry or admit. Use proof_wanted for unproved statements." >&2
+            exit 1
+          fi
