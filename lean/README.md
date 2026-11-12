@@ -21,10 +21,10 @@ This directory contains a formalization of theorems from Graham Alexander Sack's
 
 ### Theorems
 
-**Theorem 1 — Convergence of Desire** (Main Result, Complete Proof):
+**Theorem 1 — Convergence of Desire** (Main Result, **COMPLETE PROOF**):
 In equilibrium, all nodes in a minimum mutual mediator set have the same object of desire.
 
-**Theorem 2 — Non-Identity of Desire** (Complete Proof):
+**Theorem 2 — Non-Identity of Desire** (**COMPLETE PROOF**):
 If object self-links are not permitted, all nodes in a minimum MMS in equilibrium desire an object outside that set.
 
 **Theorem 3 — Existence of Equilibrium without Narcissism** (Statement Only):
@@ -70,13 +70,11 @@ lake build
 
 ## Gaps
 
-- **exists_path_in_minimum_mms**: The lemma proving that a minimum MMS has a connected undirected mediation graph is stated but not fully proven (uses `sorry`). Sack's sketch claims this follows from minimality; a complete proof would show that disconnected components violate the partition condition.
+- **existence_equilibrium_no_narcissism_only_if** (Theorem 3): Sack's sketch proves the "only if" direction. The full iff statement requires proving sufficiency (if partitionable, then equilibrium exists).
 
-- **existence_equilibrium_no_narcissism_only_if**: Sack's sketch proves the "only if" direction. The full iff statement requires proving sufficiency (if partitionable, then equilibrium exists).
+- **number_of_objects_bound** (Theorem 5): The counting argument is stated but not proven.
 
-- **number_of_objects_bound**: The counting argument is stated but not proven.
-
-Despite these gaps, the main result (Theorem 1: Convergence of Desire) is structurally complete and the proof closely follows Sack's sketch.
+**The main results (Theorems 1 and 2) are complete with rigorous proofs, no `sorry` statements.**
 
 ## License
 
