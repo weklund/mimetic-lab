@@ -173,11 +173,36 @@ def load_series(trial, trial_dir):
         return series_field, None
 
 
+# Contract aliases: allow prefix match when one side uses the alias
+SERIES_ALIASES = {
+    "eligible_agents": "eligible_count",
+    "n_active_agents": "n_alive",
+    "aggression_max_share": "top_target_share",
+}
+
+
+def _resolve_alias(name, series_dict):
+    """Resolve a series name, checking both canonical and alias."""
+    if name in series_dict:
+        return name
+    # Check if an alias exists in the series
+    for alias, canonical in SERIES_ALIASES.items():
+        if canonical == name and alias in series_dict:
+            return alias
+        if alias == name and canonical in series_dict:
+            return canonical
+    return None
+
+
 def check_determinism_prefix(incomplete_trial, complete_trial, arrays_to_check, trial_dir):
     """Check that incomplete trial's arrays match the prefix of complete trial's arrays.
     
     Per contract v0.2.2: the incomplete run's per-step arrays must equal the first 
     steps_completed steps of the completed rerun. Uses exact equality.
+    
+    Supports contract aliases: eligible_agents ↔ eligible_count,
+    n_active_agents ↔ n_alive, aggression_max_share ↔ top_target_share.
+    A prefix matches if one side uses the alias and the other the canonical name.
     
     Args:
         incomplete_trial: dict with 'series' and 'steps_completed'
@@ -217,8 +242,12 @@ def check_determinism_prefix(incomplete_trial, complete_trial, arrays_to_check, 
             all_arrays.add(key)
     
     for array_name in all_arrays:
-        inc_array = incomplete_series.get(array_name)
-        comp_array = complete_series.get(array_name)
+        # Resolve aliases
+        inc_key = _resolve_alias(array_name, incomplete_series)
+        comp_key = _resolve_alias(array_name, complete_series)
+        
+        inc_array = incomplete_series.get(inc_key) if inc_key else None
+        comp_array = complete_series.get(comp_key) if comp_key else None
         
         if inc_array is None:
             if array_name in arrays_to_check:

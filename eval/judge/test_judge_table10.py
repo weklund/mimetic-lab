@@ -15,18 +15,34 @@ import unittest
 import judge_table10 as J10
 import judge_common as JC
 
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
+
 
 def write_text(path, text):
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
 
 
-def make_trial(variant, gamma, N, seed, steps_completed=5000, timed_out=False,
-               generative=True, timeout_seconds=600.0, host="test-host", rerun_of=None):
-    """Build a minimal C-T10 trial."""
+def make_trial(variant, gamma, N, seed, n_steps_planned=8, steps_completed=None,
+               timed_out=False, generative=True, timeout_seconds=600.0, host="test-host",
+               rerun_of=None, expulsion_steps=None):
+    """Build a minimal C-T10 trial.
+    
+    Defaults to short 8-step series for fast ensemble tests. Completeness means
+    steps_completed == n_steps_planned and timed_out == false.
+    """
+    if steps_completed is None:
+        steps_completed = n_steps_planned
+    if expulsion_steps is None:
+        expulsion_steps = [2, 4] if generative and steps_completed > 4 else []
+    
     trial_id = f"table10-g{gamma:.2f}-N{N}-v{variant}-s{seed}"
     
-    # Simple series for testing
+    # All required per-step series per eval/trial-schema.md and DETERMINISM_ARRAYS
     series = {
         "t": list(range(steps_completed)),
         "n_alive": [N] * steps_completed,
@@ -38,6 +54,11 @@ def make_trial(variant, gamma, N, seed, steps_completed=5000, timed_out=False,
         "top_targets": [[0] * N] * steps_completed,
         "received_aggression": [[0.1] * N] * steps_completed,
         "aggression_gini": [0.1] * steps_completed,
+        "top_target_share": [0.15] * steps_completed,
+        "convergence_ratio": [0.9] * steps_completed,
+        "aggression_entropy": [2.5] * steps_completed,
+        "top_R": [0.05] * steps_completed,
+        "mean_R": [0.03] * steps_completed,
     }
     
     viability = {
@@ -54,7 +75,7 @@ def make_trial(variant, gamma, N, seed, steps_completed=5000, timed_out=False,
         "peak_modal": 0.95,
         "n_fragments": 1,
         "largest_fragment": N,
-        "expulsion_steps": [1000, 2000] if generative else [],
+        "expulsion_steps": expulsion_steps,
         "med_gap": 500 if generative else None,
     }
     
@@ -80,7 +101,7 @@ def make_trial(variant, gamma, N, seed, steps_completed=5000, timed_out=False,
         "expulsion_threshold": None,
         "unanimity_threshold": 0.95 if N >= 20 else min(0.95, (N - 1) / N),
         "unanimity_cooldown": 5,
-        "n_steps_planned": 5000,
+        "n_steps_planned": n_steps_planned,
         "steps_completed": steps_completed,
         "seed": seed,
         "timed_out": timed_out,
@@ -171,7 +192,6 @@ class Table10Basic(unittest.TestCase):
         
         return result, code
     
-    @unittest.skip("Full ensemble test is slow; BLOCKER 1 validated by test_single_cell_fails_missing_cells")
     def test_full_ensemble_passes(self):
         """BLOCKER 1: All 48 cells required for PASS."""
         manifest, trials = make_ensemble_full()
@@ -253,12 +273,18 @@ class Table10Seeds(unittest.TestCase):
         return result, code
     
     def test_duplicate_seed_no_missing_fails(self):
-        """BLOCKER 2: Two trials for seed 42 with no seed 1042 must not PASS."""
-        manifest, trials = make_ensemble_small()
+        """BLOCKER 2: Two complete originals for seed 42 with no seed 1042 must FAIL.
         
-        # Duplicate seed 42
+        Two complete trials with rerun_of=null for the same seed is a structural defect.
+        It is not a valid rerun. The cell must not report PASS.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        # Add a second complete original for seed 42 (both with rerun_of=null)
+        original_id = "table10-g1.05-N5-vAC-s42"
         trial_42_dup = make_trial("AC", 1.05, 5, 42, generative=True)
         trial_42_dup["trial_id"] = "table10-g1.05-N5-vAC-s42-dup"
+        trial_42_dup["rerun_of"] = None  # Not a labeled rerun
         trials[trial_42_dup["trial_id"]] = trial_42_dup
         
         # Remove seed 1042
@@ -271,9 +297,12 @@ class Table10Seeds(unittest.TestCase):
         self.assertEqual(result["verdict"], "FAIL")
         
         # Check for missing seed issue
-        cell = result["cells"][0]
-        missing_seed_issues = [i for i in cell["issues"] if "missing seeds" in i["detail"]]
-        self.assertGreater(len(missing_seed_issues), 0)
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
+        self.assertNotEqual(cell["verdict"], "PASS", "Cell must not PASS with duplicate originals and missing seed")
+        
+        # Check for seed structure issues
+        missing_seed_issues = [i for i in cell["issues"] if "missing seeds" in i["detail"] and "1042" in i["detail"]]
+        self.assertGreater(len(missing_seed_issues), 0, "Must report missing seed 1042")
 
 
 class Table10Incomplete(unittest.TestCase):
@@ -298,22 +327,22 @@ class Table10Incomplete(unittest.TestCase):
     
     def test_timed_out_trial_is_incomplete(self):
         """A trial with timed_out=true is incomplete."""
-        manifest, trials = make_ensemble_small()
+        manifest, trials = make_ensemble_full()
         
         # Make one trial timed out
         trial_id = "table10-g1.05-N5-vAC-s42"
         trials[trial_id]["timed_out"] = True
-        trials[trial_id]["steps_completed"] = 3000
+        trials[trial_id]["steps_completed"] = 5
         # Truncate series
         for key in trials[trial_id]["series"]:
-            trials[trial_id]["series"][key] = trials[trial_id]["series"][key][:3000]
+            trials[trial_id]["series"][key] = trials[trial_id]["series"][key][:5]
         
         result, code = self.run_judge(manifest, trials)
         
         self.assertEqual(result["verdict"], "INCOMPLETE")
         self.assertEqual(code, 1)
         
-        cell = result["cells"][0]
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
         self.assertEqual(cell["n_complete"], 19)
         self.assertEqual(cell["n_incomplete"], 1)
         self.assertIn(42, cell["incomplete_seeds"])
@@ -321,20 +350,20 @@ class Table10Incomplete(unittest.TestCase):
     
     def test_incomplete_steps_is_incomplete(self):
         """A trial with steps_completed < n_steps_planned is incomplete."""
-        manifest, trials = make_ensemble_small()
+        manifest, trials = make_ensemble_full()
         
         # Make one trial incomplete
         trial_id = "table10-g1.05-N5-vAC-s42"
         trials[trial_id]["timed_out"] = False
-        trials[trial_id]["steps_completed"] = 3000
+        trials[trial_id]["steps_completed"] = 5
         # Truncate series
         for key in trials[trial_id]["series"]:
-            trials[trial_id]["series"][key] = trials[trial_id]["series"][key][:3000]
+            trials[trial_id]["series"][key] = trials[trial_id]["series"][key][:5]
         
         result, code = self.run_judge(manifest, trials)
         
         self.assertEqual(result["verdict"], "INCOMPLETE")
-        cell = result["cells"][0]
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
         self.assertEqual(cell["n_incomplete"], 1)
         self.assertEqual(cell["verdict"], "INCOMPLETE")
     
@@ -345,9 +374,9 @@ class Table10Incomplete(unittest.TestCase):
         # Make one viable trial incomplete
         trial_id = "table10-g1.05-N5-vAC-s42"  # This was viable
         trials[trial_id]["timed_out"] = True
-        trials[trial_id]["steps_completed"] = 3000
+        trials[trial_id]["steps_completed"] = 5
         for key in trials[trial_id]["series"]:
-            trials[trial_id]["series"][key] = trials[trial_id]["series"][key][:3000]
+            trials[trial_id]["series"][key] = trials[trial_id]["series"][key][:5]
         
         result, code = self.run_judge(manifest, trials)
         
@@ -357,6 +386,47 @@ class Table10Incomplete(unittest.TestCase):
         self.assertEqual(cell["n_viable"], 4)  # 5 were viable, but 1 is incomplete
         self.assertIsNone(cell["computed_percent"])  # Can't compute percent with incomplete
         self.assertEqual(cell["verdict"], "INCOMPLETE")
+    
+    def test_second_timeout_yields_incomplete(self):
+        """A labeled rerun that is itself incomplete yields overall INCOMPLETE, not FAIL.
+        
+        First run incomplete, labeled rerun also incomplete -> overall INCOMPLETE,
+        issue v022.incomplete (not v022.rerun_invalid), seed appears once in incomplete_seeds.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        # Make original trial incomplete
+        incomplete_id = "table10-g1.05-N5-vAC-s42"
+        trials[incomplete_id]["timed_out"] = True
+        trials[incomplete_id]["steps_completed"] = 5
+        for key in trials[incomplete_id]["series"]:
+            trials[incomplete_id]["series"][key] = trials[incomplete_id]["series"][key][:5]
+        
+        # Add an incomplete rerun
+        rerun_id = "table10-g1.05-N5-vAC-s42-rerun"
+        rerun = make_trial("AC", 1.05, 5, 42, n_steps_planned=8, steps_completed=6, timed_out=True, generative=True)
+        rerun["trial_id"] = rerun_id
+        rerun["rerun_of"] = incomplete_id
+        trials[rerun_id] = rerun
+        manifest["trial_ids"].append(rerun_id)
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should be INCOMPLETE, not FAIL
+        self.assertEqual(result["verdict"], "INCOMPLETE")
+        
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
+        self.assertEqual(cell["n_incomplete"], 1)
+        self.assertIn(42, cell["incomplete_seeds"])
+        
+        # Check that seed 42 appears only once in incomplete_seeds
+        self.assertEqual(cell["incomplete_seeds"].count(42), 1)
+        
+        # Should have v022.incomplete issue, not v022.rerun_invalid
+        incomplete_issues = [i for i in result["issues"] if i["code"] == "v022.incomplete"]
+        rerun_invalid_issues = [i for i in result["issues"] if i["code"] == "v022.rerun_invalid"]
+        self.assertGreater(len(incomplete_issues), 0)
+        self.assertEqual(len(rerun_invalid_issues), 0)
 
 
 class Table10Reruns(unittest.TestCase):
@@ -381,26 +451,22 @@ class Table10Reruns(unittest.TestCase):
     
     def test_successful_rerun_with_determinism_check(self):
         """A rerun that matches the incomplete prefix passes determinism check."""
-        manifest, trials = make_ensemble_small()
+        manifest, trials = make_ensemble_full()
         
         # Make original trial incomplete
         incomplete_id = "table10-g1.05-N5-vAC-s42"
         trials[incomplete_id]["timed_out"] = True
-        trials[incomplete_id]["steps_completed"] = 3000
+        trials[incomplete_id]["steps_completed"] = 5
         # Truncate series
         for key in trials[incomplete_id]["series"]:
-            trials[incomplete_id]["series"][key] = trials[incomplete_id]["series"][key][:3000]
+            trials[incomplete_id]["series"][key] = trials[incomplete_id]["series"][key][:5]
         
         # Add a completed rerun
         rerun_id = "table10-g1.05-N5-vAC-s42-rerun"
         rerun = make_trial("AC", 1.05, 5, 42, generative=True)
         rerun["trial_id"] = rerun_id
         rerun["rerun_of"] = incomplete_id
-        # Make sure series prefix matches
-        for key in rerun["series"]:
-            if len(rerun["series"][key]) >= 3000:
-                # The first 3000 steps should match
-                pass
+        # Make sure series prefix matches (both are short 8-step trials now)
         trials[rerun_id] = rerun
         manifest["trial_ids"].append(rerun_id)
         
@@ -408,7 +474,7 @@ class Table10Reruns(unittest.TestCase):
         
         # Should pass because rerun is complete and matches
         self.assertEqual(result["verdict"], "PASS")
-        cell = result["cells"][0]
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
         self.assertEqual(cell["n_complete"], 20)  # 19 original complete + 1 rerun
         self.assertEqual(cell["n_incomplete"], 0)
         self.assertEqual(cell["n_reruns"], 1)
@@ -416,22 +482,22 @@ class Table10Reruns(unittest.TestCase):
     
     def test_rerun_determinism_mismatch_keeps_seed_incomplete(self):
         """A rerun whose prefix doesn't match keeps the seed incomplete."""
-        manifest, trials = make_ensemble_small()
+        manifest, trials = make_ensemble_full()
         
         # Make original trial incomplete
         incomplete_id = "table10-g1.05-N5-vAC-s42"
         trials[incomplete_id]["timed_out"] = True
-        trials[incomplete_id]["steps_completed"] = 3000
+        trials[incomplete_id]["steps_completed"] = 5
         for key in trials[incomplete_id]["series"]:
-            trials[incomplete_id]["series"][key] = trials[incomplete_id]["series"][key][:3000]
+            trials[incomplete_id]["series"][key] = trials[incomplete_id]["series"][key][:5]
         
         # Add a rerun with a mismatch
         rerun_id = "table10-g1.05-N5-vAC-s42-rerun"
         rerun = make_trial("AC", 1.05, 5, 42, generative=True)
         rerun["trial_id"] = rerun_id
         rerun["rerun_of"] = incomplete_id
-        # Introduce a mismatch in modal_agreement
-        rerun["series"]["modal_agreement"][100] = 0.9  # Different from 0.8
+        # Introduce a mismatch in modal_agreement at step 2
+        rerun["series"]["modal_agreement"][2] = 0.9  # Different from 0.8
         trials[rerun_id] = rerun
         manifest["trial_ids"].append(rerun_id)
         
@@ -439,8 +505,9 @@ class Table10Reruns(unittest.TestCase):
         
         # Should be INCOMPLETE because determinism check failed
         self.assertEqual(result["verdict"], "INCOMPLETE")
-        cell = result["cells"][0]
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
         self.assertEqual(cell["n_incomplete"], 1)  # Seed 42 stays incomplete
+        self.assertEqual(cell["n_complete"], 19)  # Failed rerun not counted
         self.assertEqual(cell["determinism_failures"], 1)
         
         # Check that there's a determinism issue
@@ -515,6 +582,274 @@ class Table10Reruns(unittest.TestCase):
         # Should have v022.rerun_invalid issue
         issues = [i for i in result["issues"] if i["code"] == "v022.rerun_invalid"]
         self.assertGreater(len(issues), 0)
+
+
+class Table10ManifestValidation(unittest.TestCase):
+    """Tests for manifest and trial file validation."""
+    
+    def run_judge(self, manifest, trials):
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table10")
+            os.makedirs(os.path.join(traces, "trials"))
+            
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+            for stem, trial in trials.items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(trial))
+            
+            out = os.path.join(d, "result.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = J10.main([traces, out])
+            
+            result = J10.load_json_strict(J10.read_bytes(out))
+        
+        return result, code
+    
+    def test_extra_trial_file_on_disk(self):
+        """Trial file on disk but not in manifest trial_ids raises ensemble.trial_files."""
+        manifest, trials = make_ensemble_small()
+        
+        # Add an extra trial file that's not in manifest
+        extra_trial = make_trial("AC", 1.05, 5, 99, generative=False)
+        extra_trial["trial_id"] = "table10-g1.05-N5-vAC-s99"
+        trials[extra_trial["trial_id"]] = extra_trial
+        # Don't add to manifest["trial_ids"]
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should have ensemble.trial_files issue
+        file_issues = [i for i in result["issues"] if i["code"] == "ensemble.trial_files"]
+        self.assertGreater(len(file_issues), 0)
+    
+    def test_missing_trial_file_on_disk(self):
+        """Trial in manifest but missing on disk raises ensemble.trial_files."""
+        manifest, trials = make_ensemble_small()
+        
+        # Add a trial_id to manifest but don't create the file
+        manifest["trial_ids"].append("table10-g1.05-N5-vAC-s99")
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should have ensemble.trial_files issue
+        file_issues = [i for i in result["issues"] if i["code"] == "ensemble.trial_files"]
+        self.assertGreater(len(file_issues), 0)
+    
+    def test_lm_rl_presence_does_not_fail(self):
+        """LM and RL trials are report-only; their presence must not fail C-T10."""
+        manifest, trials = make_ensemble_full()
+        
+        # Add some LM and RL trials
+        for variant in ["LM", "RL"]:
+            for seed in [42, 1042]:
+                trial = make_trial(variant, 1.05, 5, seed, generative=False)
+                trials[trial["trial_id"]] = trial
+                manifest["trial_ids"].append(trial["trial_id"])
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should still PASS - LM/RL presence doesn't affect verdict
+        self.assertEqual(result["verdict"], "PASS")
+        self.assertEqual(code, 0)
+        
+        # Should have exactly 48 AC/RA cells
+        self.assertEqual(len(result["cells"]), 48)
+    
+    def test_missing_required_series_fails(self):
+        """A trial missing required series arrays is a structural FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        # Remove a required series array from one trial
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        del trials[trial_id]["series"]["top_target_share"]
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should FAIL (structural/metadata failure)
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertEqual(code, 1)
+        
+        # Check for trial.metadata issue about missing series
+        metadata_issues = [i for i in result["issues"] 
+                          if i["code"] == "trial.metadata" and "top_target_share" in i["detail"]]
+        self.assertGreater(len(metadata_issues), 0)
+
+
+class Table10NPZ(unittest.TestCase):
+    """Tests for NPZ series offload."""
+    
+    def run_judge(self, manifest, trials, npz_files=None):
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table10")
+            trials_dir = os.path.join(traces, "trials")
+            os.makedirs(trials_dir)
+            
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+            for stem, trial in trials.items():
+                write_text(os.path.join(trials_dir, stem + ".json"), json.dumps(trial))
+            
+            # Write NPZ files if provided
+            if npz_files and HAS_NUMPY:
+                for npz_name, arrays in npz_files.items():
+                    npz_path = os.path.join(trials_dir, npz_name)
+                    np.savez(npz_path, **arrays)
+            
+            out = os.path.join(d, "result.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = J10.main([traces, out])
+            
+            result = J10.load_json_strict(J10.read_bytes(out))
+        
+        return result, code
+    
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    def test_npz_prefix_match(self):
+        """NPZ offload: prefix match with real .npz file."""
+        manifest, trials = make_ensemble_full()
+        
+        # Make original trial incomplete with NPZ offload
+        incomplete_id = "table10-g1.05-N5-vAC-s42"
+        incomplete_trial = trials[incomplete_id]
+        incomplete_trial["timed_out"] = True
+        incomplete_trial["steps_completed"] = 5
+        
+        # Create NPZ arrays (truncated to 5 steps)
+        npz_arrays = {}
+        for key, val in incomplete_trial["series"].items():
+            if key == "t":
+                npz_arrays[key] = np.array(val[:5])
+            elif key in ["alive_ids", "eligible_ids", "top_targets", "received_aggression"]:
+                # Nested arrays
+                npz_arrays[key] = np.array([np.array(x) for x in val[:5]], dtype=object)
+            else:
+                npz_arrays[key] = np.array(val[:5])
+        
+        # Replace series with NPZ reference
+        incomplete_trial["series"] = {"$npz": f"{incomplete_id}.npz"}
+        
+        # Add a completed rerun
+        rerun_id = "table10-g1.05-N5-vAC-s42-rerun"
+        rerun = make_trial("AC", 1.05, 5, 42, generative=True)
+        rerun["trial_id"] = rerun_id
+        rerun["rerun_of"] = incomplete_id
+        trials[rerun_id] = rerun
+        manifest["trial_ids"].append(rerun_id)
+        
+        npz_files = {f"{incomplete_id}.npz": npz_arrays}
+        
+        result, code = self.run_judge(manifest, trials, npz_files)
+        
+        # Should PASS
+        self.assertEqual(result["verdict"], "PASS")
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
+        self.assertEqual(cell["determinism_failures"], 0)
+    
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    def test_npz_prefix_mismatch(self):
+        """NPZ offload: prefix mismatch detected."""
+        manifest, trials = make_ensemble_full()
+        
+        # Make original trial incomplete with NPZ offload
+        incomplete_id = "table10-g1.05-N5-vAC-s42"
+        incomplete_trial = trials[incomplete_id]
+        incomplete_trial["timed_out"] = True
+        incomplete_trial["steps_completed"] = 5
+        
+        # Create NPZ arrays with a mismatch
+        npz_arrays = {}
+        for key, val in incomplete_trial["series"].items():
+            if key == "t":
+                npz_arrays[key] = np.array(val[:5])
+            elif key in ["alive_ids", "eligible_ids", "top_targets", "received_aggression"]:
+                npz_arrays[key] = np.array([np.array(x) for x in val[:5]], dtype=object)
+            else:
+                arr = np.array(val[:5])
+                if key == "modal_agreement":
+                    arr[2] = 0.9  # Introduce mismatch
+                npz_arrays[key] = arr
+        
+        incomplete_trial["series"] = {"$npz": f"{incomplete_id}.npz"}
+        
+        # Add a completed rerun
+        rerun_id = "table10-g1.05-N5-vAC-s42-rerun"
+        rerun = make_trial("AC", 1.05, 5, 42, generative=True)
+        rerun["trial_id"] = rerun_id
+        rerun["rerun_of"] = incomplete_id
+        trials[rerun_id] = rerun
+        manifest["trial_ids"].append(rerun_id)
+        
+        npz_files = {f"{incomplete_id}.npz": npz_arrays}
+        
+        result, code = self.run_judge(manifest, trials, npz_files)
+        
+        # Should be INCOMPLETE due to determinism failure
+        self.assertEqual(result["verdict"], "INCOMPLETE")
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
+        self.assertEqual(cell["determinism_failures"], 1)
+    
+    def test_npz_synthetic_offload(self):
+        """Synthetic {"$npz": "..."} reference (no actual numpy)."""
+        manifest, trials = make_ensemble_small()
+        
+        # Make a trial with synthetic NPZ reference
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trials[trial_id]["series"] = {"$npz": "nonexistent.npz"}
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should fail to load
+        self.assertEqual(result["verdict"], "FAIL")
+
+
+class Table10Aliases(unittest.TestCase):
+    """Tests for contract alias support."""
+    
+    def run_judge(self, manifest, trials):
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table10")
+            os.makedirs(os.path.join(traces, "trials"))
+            
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+            for stem, trial in trials.items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(trial))
+            
+            out = os.path.join(d, "result.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = J10.main([traces, out])
+            
+            result = J10.load_json_strict(J10.read_bytes(out))
+        
+        return result, code
+    
+    def test_alias_prefix_match(self):
+        """Contract aliases: eligible_agents ↔ eligible_count, n_active_agents ↔ n_alive,
+        aggression_max_share ↔ top_target_share. Prefix matches when one uses alias."""
+        manifest, trials = make_ensemble_full()
+        
+        # Make original trial incomplete
+        incomplete_id = "table10-g1.05-N5-vAC-s42"
+        trials[incomplete_id]["timed_out"] = True
+        trials[incomplete_id]["steps_completed"] = 5
+        # Truncate and use aliases
+        for key in list(trials[incomplete_id]["series"].keys()):
+            trials[incomplete_id]["series"][key] = trials[incomplete_id]["series"][key][:5]
+        # Rename to aliases
+        trials[incomplete_id]["series"]["eligible_agents"] = trials[incomplete_id]["series"].pop("eligible_count")
+        trials[incomplete_id]["series"]["n_active_agents"] = trials[incomplete_id]["series"].pop("n_alive")
+        trials[incomplete_id]["series"]["aggression_max_share"] = trials[incomplete_id]["series"].pop("top_target_share")
+        
+        # Add a completed rerun with canonical names
+        rerun_id = "table10-g1.05-N5-vAC-s42-rerun"
+        rerun = make_trial("AC", 1.05, 5, 42, generative=True)
+        rerun["trial_id"] = rerun_id
+        rerun["rerun_of"] = incomplete_id
+        trials[rerun_id] = rerun
+        manifest["trial_ids"].append(rerun_id)
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should PASS - aliases match canonical names
+        self.assertEqual(result["verdict"], "PASS")
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
+        self.assertEqual(cell["determinism_failures"], 0)
 
 
 class Table10ViabilityD7(unittest.TestCase):
