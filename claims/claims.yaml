@@ -1,4 +1,4 @@
-# Mimetic Lab claim map v0.2.3 (2026-11-12). Scheme: claims/README.md
+# Mimetic Lab claim map v0.2.4 (2026-11-12). Scheme: claims/README.md
 # No em or en dashes in this file by convention.
 
 milestones:
@@ -78,9 +78,20 @@ claims:
     counterexample: Convergent desire on a rivalrous object with no rise in hostility.
     formalization_delta:
       Black-2026: >
-        Encoded as an input rule, not tested: shared desire on one of 5 rivalrous
-        objects adds a fixed 0.2 aggression increment (Appendix A). The model cannot
-        falsify G3; it assumes it.
+        Encoded as an input rule, not tested, in all object-rivalry Black
+        results on this map (B1, B2, B3, and the AC cells of B4). For those
+        variants (LM, AC), shared desire on rivalrous objects adds aggression
+        by the Appendix C.4 rule: A_i(k) increases by rho * (1-alpha) *
+        SharedDesire(i,k) / d(i,k), with rho = 0.2, five rivalrous objects out
+        of eight (Appendix A), and d(i,k) = 1 for the neighbor pairs actually
+        updated. The rate, the object count, and the formula are Black's
+        addition. The qualitative claim that shared desire for a non-shareable
+        object generates hostility is from Girard (this claim's source; locator
+        incomplete). Status-rivalry variants (RL, RA) use a different source
+        rule (Appendix C.4) and also do not test G3. A result under this model
+        never tests G3.
+    review_flags:
+      - "Open, not settled: G3's statement says hostility does not depend on prior scarcity. Black designates five of eight objects as rivalrous by construction (Appendix A). Whether that exogenous designation is a departure from that clause is not decided on this map (G3 locator incomplete)."
     status: locator-incomplete
 
   - id: G4
@@ -207,9 +218,39 @@ claims:
       - "Published: Contagion 33 (2026), doi 10.14321/contagion.33.0195 (paywalled; not opened)."
     locator: complete for the GitHub draft; published version not checked
     assumptions:
-      - Exact operator: a_i(j) = h_i(j)^gamma / sum_k h_i(k)^gamma; pull_i(j) = a_i(j) H_i.
-      - Rivalry sourcing from 8 objects (5 rivalrous), increment 0.2.
-      - Finite horizon of 800 steps (censoring near the boundary).
+      - "From Girard (locator incomplete): G3, the qualitative claim that shared desire for a non-shareable object generates hostility (G3 source: Violence and the Sacred, pp. 145-147, via Fleming ch. 1; primary not opened). The model assumes G3; this result never tests it."
+      - "Black's addition: encoding of G3. Object-rivalry source (Appendix C.4) adds rho * (1-alpha) * SharedDesire(i,k) / d(i,k) to A_i(k) for each neighbor pair, with rho = 0.2, five rivalrous objects out of eight (Appendix A), and d(i,k) = 1 for those pairs. The rate, object count, and formula are Black's, not Girard's."
+      - "Black's addition: per-agent throughput conservation. The AC operator sets pull_i(j) = a_i(j) * H_i, so sum_j pull_i(j) = H_i (s2.2). Girard never states this (s4.1: what the model adds). Load-bearing for AC convergence: Black's Table 3 (raw h^gamma collapses mass to about 9.1) and Appendix D (fixed-scale C h^gamma has no stable convergence regime), opened in draft v18 at 89e7bbb. Those tables were not independently rerun for this entry."
+      - "Black's addition: convexity, gamma > 1, with a_i(j) = h_i(j)^gamma / sum_k h_i(k)^gamma. Girard does not distinguish linear from superlinear transmission (s4.6). This is Black's reading of 'multiplies'. The exact power-law form is a modeling choice (s4.6); the claim is about this operator family."
+      - "Modeling convenience: Watts-Strogatz network, rewire 0.15, and k = max(6, min(floor(0.12N), 20)) rounded down to even. Not from Girard. Table 2b, which this claim reports, uses that topology. Black's Table E1 and E1b (opened) report other topologies at selected gamma, not a phase-boundary sweep; topology is not here claimed load-bearing for the Table 2b numbers."
+      - "Modeling convenience: convergence defined as modal-target agreement >= 0.95 for 10 consecutive steps. Black s2.3 calls 0.95 somewhat arbitrary and reports that 0.90 and 0.98 do not meaningfully shift the Section 3.2 boundary. That robustness report was not independently rerun here."
+      - "Modeling convenience: finite horizon of 800 steps (censoring near the boundary)."
+      - "Modeling convenience: alpha = 0.15 and decay 0.03, as in the Table 2b runs. Sub-claim B1b reports robustness to alpha in [0.05, 0.20] at decay 0.03, and that gamma* rises with decay."
+    depends_on:
+      - claim: G3
+        origin: girard
+        role: assumed-not-tested
+      - assumption: g3-encoding
+        origin: black-addition
+        role: setup
+      - assumption: throughput-conservation
+        origin: black-addition
+        role: load-bearing
+        evidence: "Black v18 Table 3 and Appendix D, opened; not independently rerun. Issue #16 step 3 (labeled-extension reruns, formal counterexamples) is not this PR."
+      - assumption: convexity-gamma-gt-1
+        origin: black-addition
+        role: load-bearing
+        evidence: "The claim itself is the reported phase boundary just above gamma = 1 (Table 2b). Black s4.6 treats the positive superlinear result as built into the functional form."
+      - assumption: watts-strogatz-topology
+        origin: modeling-convenience
+        role: setup
+      - assumption: convergence-threshold
+        origin: modeling-convenience
+        role: setup
+        evidence: "Black s2.3 reports that 0.90 and 0.98 do not meaningfully shift the boundary; not independently rerun."
+      - assumption: horizon-800
+        origin: modeling-convenience
+        role: setup
     counterexample: >
       A rerun of the pinned code and seeds giving any convergence at gamma <= 1.01
       or less than 100% at gamma >= 1.04 at any of N = 50, 100, 200; or an
@@ -224,7 +265,15 @@ claims:
       - "Small N is not a clean step: at N = 5, 35% convergence at gamma = 0.95 and 50% at 1.03 (exp_small_n_phase_boundary_results.txt). Black attributes this to the 0.80 threshold."
       - "README calls the draft v18 while Appendix B cites tag v15. Record which commit the reproduction used."
       - "Black's bibliography misattributes 'Complex Mimetic Systems' to 'Gardin, A.' (it is Hans Weigand, Contagion 15/16, 2008, pp. 63-87), cites Paes as 'L. Paes', and cites Sack in Contagion 28 (not found; the version opened is Springer CSSSA 2020 proceedings). Do not copy locators from it."
-    formalization_delta: See G4. The boundary is a property of this operator family; Black's own Appendix G shows the softmax variant's convergence band vanishes at N >= 150.
+      - "Issue #16 step 3 (independent labeled-extension reruns under the contract, and formal counterexamples where they exist) is not this PR. Load-bearing evidence cited on this claim is Black's own opened tables, still reported-by-source."
+    formalization_delta: >
+      See G4. The boundary is a property of this operator family; Black's own
+      Appendix G shows the softmax variant's convergence band vanishes at N >= 150.
+      G3 is assumed, not tested. Throughput conservation and convexity (gamma > 1)
+      are Black's additions and are load-bearing for this conclusion, on Black's
+      own opened ablations (Table 3, Appendix D) and on the Table 2b grid.
+      Topology, the 0.95-for-10-steps threshold, and the 800-step horizon are
+      modeling conveniences. A pass upgrades this claim only, never G4.
     status: reported-by-source
 
   - id: B2
@@ -237,11 +286,38 @@ claims:
       With gamma = 1 (LM), no run in any tested parameterization reaches the
       convergence criterion (Table 2: peak modal 0.240; s4.6).
     source: ["Black v18 s3.1 Tables 1 and 1b, s3.2 Table 2, s4.6 'Circularity'."]
-    assumptions: As B1.
+    assumptions:
+      - "From Girard (locator incomplete): G3, as on B1. The model still assumes G3. Removing the G3 increment would not, by itself, produce a counterexample to this negative result (no hostility still fails the convergence criterion)."
+      - "Black's addition, withheld in this claim: convexity. The runs use gamma = 1 (LM), which Black s2.2 says reduces the AC operator to linear mimesis. This is the condition the claim reports."
+      - "Black's addition, automatic at gamma = 1: per-agent throughput conservation is not a distinctive ingredient here, because at gamma = 1 the attention weights are already proportional to perceived hostility and no redistribution occurs (s2.2)."
+      - "Black's addition, as setup: the same G3 encoding as B1 (rho = 0.2, five rivalrous objects, Appendix C.4)."
+      - "Modeling convenience: the same Watts-Strogatz topology, convergence threshold, and finite horizon as the tested LM grid (Tables 1, 1b, and 2). The claim is not a theorem about linear averaging off that grid."
+    depends_on:
+      - claim: G3
+        origin: girard
+        role: assumed-not-tested
+      - assumption: gamma-equals-1
+        origin: black-addition
+        role: load-bearing
+        evidence: "Black v18 Tables 1, 1b, and 2, and s4.6, opened; not independently rerun for this entry. Black s4.6 treats the negative linear result as not built into the functional form."
+      - assumption: watts-strogatz-topology
+        origin: modeling-convenience
+        role: setup
+      - assumption: convergence-threshold
+        origin: modeling-convenience
+        role: setup
+      - assumption: horizon-600
+        origin: modeling-convenience
+        role: setup
+        evidence: "Tables 1, 1b, and 2 ran 600 steps."
     counterexample: One LM run meeting the criterion under the paper's parameters.
     formalization_delta: >
       This is the claim Black says is not built in. It holds only for the tested
-      grid and horizon; it is not a theorem about linear averaging.
+      grid and horizon; it is not a theorem about linear averaging. G3 is
+      assumed, not tested, in these runs as in all Black object-rivalry
+      results. A pass upgrades this claim only, never G4.
+    review_flags:
+      - "Issue #16 step 3 (independent labeled-extension reruns, formal counterexamples) is not this PR."
     status: reported-by-source
 
   - id: B3
@@ -254,9 +330,35 @@ claims:
       mass to about 9.1 (gamma = 2); a fixed-scale map C h^gamma has no stable
       convergence regime (explodes above C_crit = 0.86 C_cal).
     source: ["Black v18 s3.3 Table 3; Appendix D."]
-    assumptions: Hostility signals are mostly below 1 after averaging.
+    assumptions:
+      - "From Girard (locator incomplete): G3, as on B1. The ablation still uses the object-rivalry source. The model assumes G3; this result never tests it."
+      - "Black's addition, the load-bearing contrast: per-agent throughput conservation is present in the full AC operator and absent in the two ablations (raw h^gamma, and the fixed-scale map C h^gamma). Girard never states conservation (s4.1)."
+      - "Black's addition, held fixed in the ablations: convexity at gamma = 2 (Table 3 and Appendix D)."
+      - "Black's addition, as setup: the same G3 encoding as B1."
+      - "Model property (Black's explanation, s3.3): hostility signals are mostly below 1 after prestige-weighted averaging, so for gamma > 1 a raw power transform shrinks them. This is an observed property of the model state, not a modeling choice."
+      - "Modeling convenience: N = 50, no expulsion, 600 steps, 8 runs, default topology and alpha (Table 3, Appendix D)."
+    depends_on:
+      - claim: G3
+        origin: girard
+        role: assumed-not-tested
+      - assumption: throughput-conservation
+        origin: black-addition
+        role: load-bearing
+        evidence: "Black v18 Table 3 (raw h^gamma: peak modal 0.113, mass about 9.1) and Appendix D (no stable regime; explodes above C_crit approximately 0.86 C_cal). Opened in draft v18 at 89e7bbb; not independently rerun. Issue #16 step 3 is not this PR."
+      - assumption: convexity-gamma-2
+        origin: black-addition
+        role: setup
+      - assumption: horizon-600
+        origin: modeling-convenience
+        role: setup
     counterexample: A non-conserving convex operator that converges stably in the same model.
-    formalization_delta: Adds an assumption (per-agent conservation) that has no stated textual basis in Girard.
+    formalization_delta: >
+      Adds an assumption (per-agent conservation) that has no stated textual
+      basis in Girard. G3 is assumed, not tested. This claim is Black's own
+      ablation of that addition, reported-by-source. A pass upgrades this
+      claim only, never a G claim.
+    review_flags:
+      - "Issue #16 step 3 (independent labeled-extension reruns, formal counterexamples) is not this PR."
     status: reported-by-source
 
   - id: B4
@@ -277,8 +379,35 @@ claims:
       - "Script: exp_small_n_viability.py; predicate: small_n_utils.classify_exhaustion."
     locator: complete for the GitHub draft; published version not checked
     assumptions:
-      - min_silence = 500, as the script ran (contract known mismatch 1). The s3.11.2 prose's 2000+ is reported as D7-paper and never scored.
-      - Finite horizon of 5000 steps.
+      - "From Girard (locator incomplete): G3, as on B1. AC uses the object-rivalry source; RA uses status-rivalry instead (Appendix C.4). In both, hostility is injected by an input rule, not tested. This result never tests G3."
+      - "Black's addition: the same AC (and RA) spread operator as B1, including throughput conservation and convexity at the Table 10 gamma values (1.05, 1.5, 2.0), all above the reported phase boundary."
+      - "Black's addition: unanimity-triggered expulsion with theta(N) = min(0.95, (N-1)/N) and cooldown 5. Expulsion is a consequence rule (s2.1), not a test of G6's durable peace."
+      - "Modeling convenience: min_silence = 500, as the script ran (contract known mismatch 1). The s3.11.2 prose's 2000+ is reported as D7-paper and never scored."
+      - "Modeling convenience: finite horizon of 5000 steps."
+      - "Modeling convenience: N in {5, 10, ..., 40}, 20 seeds, and the classify_exhaustion predicate (fewer than half the agents expelled, at least one expulsion, min_silence as above)."
+    depends_on:
+      - claim: G3
+        origin: girard
+        role: assumed-not-tested
+        note: "AC cells only. RA cells use status-rivalry (Appendix C.4) and do not rest on G3."
+      - assumption: throughput-conservation
+        origin: black-addition
+        role: setup
+        evidence: "Table 10 uses AC and RA, which include conservation. This claim does not itself isolate conservation; see B3."
+      - assumption: convexity-gamma-gt-1
+        origin: black-addition
+        role: setup
+        evidence: "Table 10 gamma values are all above the reported B1 boundary."
+      - assumption: unanimity-expulsion
+        origin: black-addition
+        role: load-bearing
+      - assumption: min-silence-500
+        origin: modeling-convenience
+        role: setup
+        evidence: "Constitutive of the scored predicate (min_silence = 500, not the prose's 2000+; contract known mismatch 1). Not isolated by an ablation, so not load-bearing in the scheme's sense."
+      - assumption: horizon-5000
+        origin: modeling-convenience
+        role: setup
     counterexample: >
       A rerun of the pinned code and seeds giving any Table 10 cell a different
       count out of 20.
@@ -286,8 +415,13 @@ claims:
       See G6. Black calls the predicate "generative founding murder". It measures
       self-exhaustion of the expulsion cycle only: no sacred, no myth, no ritual,
       and no misrecognition of the victim (see G6). min_silence = 500 weakens
-      "durable" relative to the prose. A pass upgrades this claim only, never G6.
+      "durable" relative to the prose. G3 is assumed, not tested, in the AC
+      cells; RA cells use a different source and also do not test G3.
+      Conservation and convexity are present as in B1
+      and are not isolated here. A pass upgrades this claim only, never G6.
       Contract item: C-T10, P-gen, D7.
+    review_flags:
+      - "Issue #16 step 3 (independent labeled-extension reruns, formal counterexamples) is not this PR."
     status: reported-by-source
 
   - id: S1
@@ -581,3 +715,5 @@ changelog:
   - "2026-11-11 v0.2.1: S3 only-if noted as proved in Lean (PR #9 merge 560d037, existence_equilibrium_no_narcissism_only_if, Sack's mutual mediator set wording); S3 stays stated until the if direction is also done; Lean file cites for S1, S2, and S4 updated from PR #2 head d0decde to merge d67b670."
   - "2026-11-11 v0.2.2: S3 if direction noted as proved in Lean (PR #11 merge 30b330e): existence_equilibrium_no_narcissism_if (med-closed partition) and existence_equilibrium_no_narcissism_if_weak_components (claim wording, via two_weak_components_yield_partition). The claim statement's only-if is the contrapositive of unique_narcissist_of_weakly_connected. S3 moves to proved-in-lean. Nonempty node set moved from review_flags into assumptions. existence_equilibrium_no_narcissism_only_if_minimum stays proof_wanted and is not required for S3's statement."
   - "2026-11-12 v0.2.3: O5, O6, O7 added for issue #14 readings of G4. O5 (majority period at most 2, on binary labels) is reported-by-source from the opened Goles-Ruz 2015 restatement of Goles-Olivos 1980; the statement is restricted to binary labels because the opened sources are binary or threshold, and the 1983 Poljak and Sůra PDF (the usual multi-opinion citation) was not opened. The 1980 and 1983 PDFs were not opened, so locators stay at article page ranges and no unread theorem numbers are used. O6 (majority can stay split) is stated, with three configurations checked by direct inspection, including a vertex-target example; the vertex-target example uses the majority rule on vertex-valued labels, stated in O6's assumptions, not as the O5 binary rule. O7 (voter-model unanimity) is reported-by-source from opened Aldous-Fill section 14.3 and Cooper et al. arXiv 1204.4106v3, with the schedule named; Donnelly-Welsh is recorded by bibliographic title and page range only. G4 formalization_delta gains Majority-O5-O6 and Voter-O7 keys. G4 status is unchanged. A pass never upgrades G4."
+  - "2026-11-12 v0.2.4: Issue #16 assumption audit for Black claims. Every B claim (B1, B2, B3, B4) now classifies its assumptions as from Girard, Black's addition, or a modeling convenience, and has a depends_on list. G3's Black formalization_delta is tightened to the opened Appendix C.4 rule (rho * (1-alpha) * SharedDesire, rho = 0.2) and says plainly that G3 is never tested in any Black result (assumed as an input in object-rivalry runs; not used, and still not tested, in status-rivalry runs). The 'fixed 0.2 increment' wording was less precise than C.4. Load-bearing evidence cited here is Black's own opened Table 3 and Appendix D, still reported-by-source; independent labeled-extension reruns and formal counterexamples (issue #16 step 3) are not this PR. The scheme gains a depends_on field. O5, O6, and O7 are unchanged. G4 and G6 status are unchanged. A pass never upgrades a G. Paes (O1) and G5 are deferred, as the issue marks them lower priority."
+  - "2026-11-12 v0.2.4 review: B4's G3 depends_on is scoped to the AC cells (RA does not rest on G3). B2's horizon is named horizon-600, matching Tables 1, 1b, and 2. B3's below-1 hostility note is classified as a model property, not a modeling convenience. The scheme defines load-bearing (removing it is reported to change the conclusion, with evidence) versus setup, and allows an optional note to scope an entry. B4's min-silence-500 is setup: it is constitutive of the scored predicate, not isolated by an ablation. A review flag on G3 records the open scarcity question (exogenous rivalrous objects versus 'does not depend on prior scarcity'); that question is not settled here. B2's formalization_delta now says 'all Black object-rivalry results,' matching the scoped G3 entry."
