@@ -437,13 +437,14 @@ claims:
 
 
   - id: O5
-    title: Majority imitation converges to a fixed point or a 2-cycle
+    title: Majority imitation on binary labels converges to a fixed point or a 2-cycle
     priority: P1
     milestone: later
     kind: theorem
     statement: >
-      On a finite undirected graph, under synchronous update in which each
-      agent adopts the target held by a strict majority of its neighbors and
+      On a finite undirected graph with binary labels (each vertex holds a
+      value in {0,1} or in {+1,-1}), under synchronous update in which each
+      agent adopts the bit held by a strict majority of its neighbors and
       keeps its own on a tie, every trajectory eventually reaches a fixed
       point or a cycle of length 2.
     source:
@@ -452,24 +453,28 @@ claims:
       - "Moran, 'On the period-two-property of the majority operator in infinite graphs,' Trans. AMS 347 (1995) 1649-1667, DOI 10.1090/S0002-9947-1995-1297535-1. Crossref abstract opened: the operator labels each vertex by the majority bit of its neighbors and retains the vertex's own label on a tie. The abstract treats locally finite graphs, including infinite ones, and does not, in the text opened, attribute the finite-graph case to Goles-Olivos or Poljak and Sůra. Full PDF not opened (publisher 403)."
       - "Related primary, record only: Poljak and Sůra, 'On periodical behaviour in societies with symmetric influences,' Combinatorica 3(1) (1983) 119-121, DOI 10.1007/BF02579347. Bibliographic record opened (Crossref). Full PDF and abstract not opened. No theorem statement or tie rule is taken from this paper."
     assumptions:
+      - "Labels are binary: each vertex holds a value in {0,1} or in {+1,-1}."
       - "Synchronous deterministic update; each agent takes a strict majority of neighbors and keeps its own on a tie."
       - "The graph is finite, undirected, and fixed (no growth or rewiring)."
-      - "A different tie-breaking rule, or a plurality rule, is a different model; period at most 2 is not claimed for those."
+      - "A different tie-breaking rule, a plurality rule, or a multi-valued label set is a different model; period at most 2 is not claimed for those from the opened sources."
     formalization_delta: >
-      Relative to G4: discrete targets (a bit, or a vertex), not continuous
-      hostility. Deterministic synchronous update, not a recruitment process
-      whose pull multiplies with the number already polarized. No objects and
-      no acquisitive rivalry stage; agents copy targets directly. No
-      scapegoat-specific mechanism. This claim is only the period bound, not
-      G4's inevitable unanimity (see O6).
+      Relative to G4: discrete binary labels, not continuous hostility.
+      Deterministic synchronous update, not a recruitment process whose
+      pull multiplies with the number already polarized. No objects and
+      no acquisitive rivalry stage; agents copy labels directly. No
+      scapegoat-specific mechanism. This claim is only the period bound
+      for the binary rule, not G4's inevitable unanimity (see O6). The
+      multi-valued or vertex-target case is not part of this
+      reported-by-source claim.
     stands_in_for: G4
     status: reported-by-source
     review_flags:
       - "The 1980 Goles-Olivos PDF was not opened; the period-2 statement used here is the 2015 Goles-Ruz restatement, plus the bibliographic record of the 1980 article. Do not add a 1980 theorem number until that PDF is read. Whether the 1980 statement restricts the diagonal is unchecked."
       - "The 1983 Poljak and Sůra PDF and abstract were not opened. Do not cite that paper for a plurality or tie rule."
+      - "The opened sources for the period-2 statement (Goles-Ruz 2015 pp. 156-157, Moran 1995 abstract) are binary or threshold. The multi-valued case is not taken from an opened source; Poljak and Sůra, the usual citation for that case, was not opened. Vertex-target examples belong on O6, which is stated from direct inspection."
     counterexample: >
-      A trajectory under this exact rule (strict majority, keep own on a tie)
-      with period greater than 2.
+      A trajectory under this exact binary rule (strict majority, keep own
+      on a tie) with period greater than 2.
 
   - id: O6
     title: Majority imitation can stay split
@@ -572,4 +577,4 @@ changelog:
   - "2026-11-11 v0.2 review pass: S2 statement reworded to Sack's minimum mutual mediator set form, matching non_identity_of_desire (status stays proved-in-lean); B4 Table 10 gloss corrected against draft v18 cells (pass test remains cell-by-cell); Girard misrecognition sentence moved from B4 formalization_delta onto G6 with G6's source; W1 redaction from v0.1.1 kept on rebase onto main after PR #3."
   - "2026-11-11 v0.2.1: S3 only-if noted as proved in Lean (PR #9 merge 560d037, existence_equilibrium_no_narcissism_only_if, Sack's mutual mediator set wording); S3 stays stated until the if direction is also done; Lean file cites for S1, S2, and S4 updated from PR #2 head d0decde to merge d67b670."
   - "2026-11-11 v0.2.2: S3 if direction noted as proved in Lean (PR #11 merge 30b330e): existence_equilibrium_no_narcissism_if (med-closed partition) and existence_equilibrium_no_narcissism_if_weak_components (claim wording, via two_weak_components_yield_partition). The claim statement's only-if is the contrapositive of unique_narcissist_of_weakly_connected. S3 moves to proved-in-lean. Nonempty node set moved from review_flags into assumptions. existence_equilibrium_no_narcissism_only_if_minimum stays proof_wanted and is not required for S3's statement."
-  - "2026-11-12 v0.2.3: O5, O6, O7 added for issue #14 readings of G4. O5 (majority period at most 2) is reported-by-source from the opened Goles-Ruz 2015 restatement of Goles-Olivos 1980; the 1980 and 1983 PDFs were not opened, so locators stay at article page ranges and no unread theorem numbers are used. O6 (majority can stay split) is stated, with three configurations checked by direct inspection. O7 (voter-model unanimity) is reported-by-source from opened Aldous-Fill section 14.3 and Cooper et al. arXiv 1204.4106v3, with the schedule named; Donnelly-Welsh is recorded by bibliographic title and page range only. G4 formalization_delta gains Majority-O5-O6 and Voter-O7 keys. G4 status is unchanged. A pass never upgrades G4."
+  - "2026-11-12 v0.2.3: O5, O6, O7 added for issue #14 readings of G4. O5 (majority period at most 2, on binary labels) is reported-by-source from the opened Goles-Ruz 2015 restatement of Goles-Olivos 1980; the statement is restricted to binary labels because the opened sources are binary or threshold, and the 1983 Poljak and Sůra PDF (the usual multi-opinion citation) was not opened. The 1980 and 1983 PDFs were not opened, so locators stay at article page ranges and no unread theorem numbers are used. O6 (majority can stay split) is stated, with three configurations checked by direct inspection, including a vertex-target example. O7 (voter-model unanimity) is reported-by-source from opened Aldous-Fill section 14.3 and Cooper et al. arXiv 1204.4106v3, with the schedule named; Donnelly-Welsh is recorded by bibliographic title and page range only. G4 formalization_delta gains Majority-O5-O6 and Voter-O7 keys. G4 status is unchanged. A pass never upgrades G4."
