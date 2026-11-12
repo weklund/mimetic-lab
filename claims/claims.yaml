@@ -1,4 +1,4 @@
-# Mimetic Lab claim map v0.2.2 (2026-11-11). Scheme: claims/README.md
+# Mimetic Lab claim map v0.2.3 (2026-11-12). Scheme: claims/README.md
 # No em or en dashes in this file by convention.
 
 milestones:
@@ -118,6 +118,15 @@ claims:
         Victim choice is programmed (accusation targets isolated agents first;
         expulsion fires once more than a tenth are marked), so unanimity is not
         emergent from mimesis alone.
+      Majority-O5-O6: >
+        Discrete targets and deterministic majority of neighbors, with no objects
+        or rivalry stage and no multiplying attraction. A period of at most 2 does
+        not imply unanimous targeting of one individual; split fixed points exist
+        (O6). This reading never upgrades G4.
+      Voter-O7: >
+        Discrete opinions and linear random copying. Almost-sure unanimity depends
+        on the update schedule and is not claimed for synchronous update on
+        bipartite graphs. No objects or rivalry stage. This reading never upgrades G4.
     status: locator-incomplete
 
   - id: G5
@@ -426,6 +435,118 @@ claims:
     source: ["Weigand, 'Complex Mimetic Systems', Contagion 15/16 (2008) 63-87; girard.nl/texts_online/w/Weigand_Hans_11.pdf, ss3-4."]
     status: reported-by-source
 
+
+  - id: O5
+    title: Majority imitation converges to a fixed point or a 2-cycle
+    priority: P1
+    milestone: later
+    kind: theorem
+    statement: >
+      On a finite undirected graph, under synchronous update in which each
+      agent adopts the target held by a strict majority of its neighbors and
+      keeps its own on a tie, every trajectory eventually reaches a fixed
+      point or a cycle of length 2.
+    source:
+      - "Goles and Olivos, 'Periodic behaviour of generalized threshold functions,' Discrete Mathematics 30(2) (1980) 187-189, DOI 10.1016/0012-365X(80)90121-1. Bibliographic record opened (Crossref: title, authors, journal, volume, issue, pages). Full PDF and abstract not opened. Locator: article page range only; no theorem number."
+      - "Restatement opened: Goles and Ruz, 'Dynamics of neural networks over undirected graphs,' Neural Networks 63 (2015) 156-169, DOI 10.1016/j.neunet.2014.10.013, pp. 156-157: parallel (synchronous) update on a symmetric neural network converges to a fixed point or a cycle of period 2, citing Goles and Olivos (1980). Full PDF opened. Corollary 2.1 and Theorem 3.1 of that paper are other results (nonnegative-definite matrices, and the alpha(G) criterion) and are not this claim."
+      - "Moran, 'On the period-two-property of the majority operator in infinite graphs,' Trans. AMS 347 (1995) 1649-1667, DOI 10.1090/S0002-9947-1995-1297535-1. Crossref abstract opened: the operator labels each vertex by the majority bit of its neighbors and retains the vertex's own label on a tie. The abstract treats locally finite graphs, including infinite ones, and does not, in the text opened, attribute the finite-graph case to Goles-Olivos or Poljak and Sůra. Full PDF not opened (publisher 403)."
+      - "Related primary, record only: Poljak and Sůra, 'On periodical behaviour in societies with symmetric influences,' Combinatorica 3(1) (1983) 119-121, DOI 10.1007/BF02579347. Bibliographic record opened (Crossref). Full PDF and abstract not opened. No theorem statement or tie rule is taken from this paper."
+    assumptions:
+      - "Synchronous deterministic update; each agent takes a strict majority of neighbors and keeps its own on a tie."
+      - "The graph is finite, undirected, and fixed (no growth or rewiring)."
+      - "A different tie-breaking rule, or a plurality rule, is a different model; period at most 2 is not claimed for those."
+    formalization_delta: >
+      Relative to G4: discrete targets (a bit, or a vertex), not continuous
+      hostility. Deterministic synchronous update, not a recruitment process
+      whose pull multiplies with the number already polarized. No objects and
+      no acquisitive rivalry stage; agents copy targets directly. No
+      scapegoat-specific mechanism. This claim is only the period bound, not
+      G4's inevitable unanimity (see O6).
+    stands_in_for: G4
+    status: reported-by-source
+    review_flags:
+      - "The 1980 Goles-Olivos PDF was not opened; the period-2 statement used here is the 2015 Goles-Ruz restatement, plus the bibliographic record of the 1980 article. Do not add a 1980 theorem number until that PDF is read. Whether the 1980 statement restricts the diagonal is unchecked."
+      - "The 1983 Poljak and Sůra PDF and abstract were not opened. Do not cite that paper for a plurality or tie rule."
+    counterexample: >
+      A trajectory under this exact rule (strict majority, keep own on a tie)
+      with period greater than 2.
+
+  - id: O6
+    title: Majority imitation can stay split
+    priority: P1
+    milestone: later
+    kind: model
+    statement: >
+      Under the same strict-majority, keep-own-on-tie rule as O5, unanimity
+      is not inevitable. Two configurations that are split fixed points, checked
+      by direct inspection: (1) the 4-vertex path with binary labels (0,0,1,1);
+      (2) two triangles {0,1,2} and {3,4,5} joined by the edge 2-3, with binary
+      labels (0,0,0,1,1,1). The same two-triangle graph with vertex targets
+      (5,5,5,0,0,0) is a fixed point that is not a single-victim state: each
+      faction targets a member of the other.
+    source:
+      - "The O5 update rule. The three configurations were checked by direct inspection of one step of that rule, not taken from a published table. Lean issue #15 is to confirm the two-triangle example by decide and to prove a general period bound."
+    assumptions:
+      - "Same update rule as O5."
+    formalization_delta: >
+      Relative to G4: same drops as O5 (discrete targets, deterministic
+      majority, no objects or rivalry, no multiplying attraction). This
+      reading therefore does not support G4's 'inevitable' unification
+      against a single individual. If self-targeting is forbidden, not every
+      agent can target the same victim, so the unanimity test used here is
+      ordinary agreement (all agents holding the same label), and the
+      examples still fail it. A Lean proof of these examples upgrades only
+      this claim, never G4.
+    stands_in_for: G4
+    status: stated
+    counterexample: >
+      A proof that one of the named configurations is not a fixed point
+      under the O5 rule, or a theorem that every trajectory under that
+      rule reaches unanimity.
+
+  - id: O7
+    title: Voter-model unanimity depends on the update schedule
+    priority: P1
+    milestone: later
+    kind: theorem
+    statement: >
+      In the voter model on a finite connected graph (each agent copies a
+      random neighbor's opinion), almost-sure unanimity is a claim about a
+      specified schedule. In continuous time, Aldous and Fill state that a
+      unique consensus opinion appears at a finite random time on a finite
+      regular graph, and that the structural results extend to general
+      graphs. For discrete-time synchronous update, published work assumes
+      the graph is not bipartite, or that the walk is lazy (an agent may
+      keep its own opinion with probability 1/2). The almost-sure claim is
+      not made here for synchronous update on a bipartite graph.
+    source:
+      - "Aldous and Fill, Reversible Markov Chains and Random Walks on Graphs, section 14.3 (March 10, 1994 text), opened at https://www.stat.berkeley.edu/~aldous/RWG/Book_Ralph/Ch14.S3.html. They define the continuous-time voter model on a finite regular graph and state that at some random time C_vm there will be only one consensus opinion. Proposition 14.9 is a bound on the expected consensus time, not the almost-sure claim itself. The opened section contains no Donnelly-Welsh citation."
+      - "Cooper, Elsasser, Ono, and Radzik, arXiv 1204.4106v3 (25 Dec 2016), full preprint opened. Pages 3-4: they assume the graph is not bipartite, or that the random walks are lazy and pause with probability 1/2 (equivalently, a voter may choose its own opinion with that probability). The abstract notes lack of coalescence on bipartite graphs as a reason for the lazy assumption. Via Cooper, Hassin and Peleg are cited for an O(n^3 log n) expected completion time on any connected graph; that paper itself was not opened. The SIAM Journal on Discrete Mathematics 27 (2013) pagination was not opened separately."
+      - "Clifford and Sudbury, 'A model for spatial conflict,' Biometrika 60(3) (1973) 581-588, DOI 10.1093/biomet/60.3.581. Bibliographic record opened (Crossref). Full PDF and abstract not opened. Locator: article page range only."
+      - "Holley and Liggett, 'Ergodic Theorems for Weakly Interacting Infinite Systems and the Voter Model,' Ann. Probab. 3(4) (1975) 643-663, DOI 10.1214/aop/1176996306. Bibliographic record and Crossref abstract opened. Full PDF not opened. The work is infinite-system theory; no finite-graph theorem is taken from it."
+      - "Donnelly and Welsh, 'Finite particle systems and infection models,' Math. Proc. Camb. Phil. Soc. 94 (1983) 167-182, DOI 10.1017/S0305004100060989. Bibliographic record opened (Crossref). Full PDF and abstract not opened. Locator: article page range only; no theorem number."
+    assumptions:
+      - "The graph is finite and connected, and is fixed."
+      - "The schedule must be named: continuous-time, asynchronous, or lazy (or synchronous on a non-bipartite graph). Synchronous update on a bipartite graph is excluded from the almost-sure claim."
+    formalization_delta: >
+      Relative to G4: discrete opinions, not continuous hostility. Adoption
+      is a random copy of a neighbor, so it is linear in the current count,
+      not a pull that multiplies with the number already polarized. No
+      objects, no rivalry stage, and no scapegoat-specific mechanism. Fixed
+      finite undirected graph, no growth or rewiring. Almost-sure unanimity,
+      where it holds, is a fact about this Markov chain, not a reading of
+      G4's 'inevitable' unification, and a pass never upgrades G4.
+    stands_in_for: G4
+    status: reported-by-source
+    review_flags:
+      - "The almost-sure finite-graph theorem is not given a theorem number from Donnelly and Welsh; that PDF was not opened. Proposition 14.9 of Aldous and Fill is not to be cited as that theorem."
+      - "Absorption probabilities equal to the degree-weighted initial share are not recorded here; no primary for that identity was opened."
+    counterexample: >
+      A continuous-time or lazy voter process on a finite connected graph
+      that, with positive probability, never reaches a single opinion; or a
+      sourced theorem that synchronous voter update on a connected bipartite
+      graph reaches unanimity almost surely.
+
   - id: W1
     title: Anti-mimesis converges on the rival (Wes, hypothesis)
     priority: P2
@@ -451,3 +572,4 @@ changelog:
   - "2026-11-11 v0.2 review pass: S2 statement reworded to Sack's minimum mutual mediator set form, matching non_identity_of_desire (status stays proved-in-lean); B4 Table 10 gloss corrected against draft v18 cells (pass test remains cell-by-cell); Girard misrecognition sentence moved from B4 formalization_delta onto G6 with G6's source; W1 redaction from v0.1.1 kept on rebase onto main after PR #3."
   - "2026-11-11 v0.2.1: S3 only-if noted as proved in Lean (PR #9 merge 560d037, existence_equilibrium_no_narcissism_only_if, Sack's mutual mediator set wording); S3 stays stated until the if direction is also done; Lean file cites for S1, S2, and S4 updated from PR #2 head d0decde to merge d67b670."
   - "2026-11-11 v0.2.2: S3 if direction noted as proved in Lean (PR #11 merge 30b330e): existence_equilibrium_no_narcissism_if (med-closed partition) and existence_equilibrium_no_narcissism_if_weak_components (claim wording, via two_weak_components_yield_partition). The claim statement's only-if is the contrapositive of unique_narcissist_of_weakly_connected. S3 moves to proved-in-lean. Nonempty node set moved from review_flags into assumptions. existence_equilibrium_no_narcissism_only_if_minimum stays proof_wanted and is not required for S3's statement."
+  - "2026-11-12 v0.2.3: O5, O6, O7 added for issue #14 readings of G4. O5 (majority period at most 2) is reported-by-source from the opened Goles-Ruz 2015 restatement of Goles-Olivos 1980; the 1980 and 1983 PDFs were not opened, so locators stay at article page ranges and no unread theorem numbers are used. O6 (majority can stay split) is stated, with three configurations checked by direct inspection. O7 (voter-model unanimity) is reported-by-source from opened Aldous-Fill section 14.3 and Cooper et al. arXiv 1204.4106v3, with the schedule named; Donnelly-Welsh is recorded by bibliographic title and page range only. G4 formalization_delta gains Majority-O5-O6 and Voter-O7 keys. G4 status is unchanged. A pass never upgrades G4."
