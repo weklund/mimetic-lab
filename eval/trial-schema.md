@@ -1,6 +1,8 @@
-# Evaluation contract v0.2: complete trial and manifest schema
+# Evaluation contract v0.2.1: complete trial and manifest schema
 
-This is the rest of the per-trial object. Implement from this document. Layout `eval/traces/v0.2/` is preferred; `eval/traces/v0.1/` is accepted if already in use. UTF-8 JSON, no NaN or Infinity (use `null`). Do not pre-score.
+This is the rest of the per-trial object. Implement from this document. Layout `eval/traces/v0.2/` is preferred; `eval/traces/v0.1/` is accepted if already in use. UTF-8 JSON, no NaN or Infinity (use `null`); this includes number literals such as `1e309` that overflow to infinity, which the judge rejects. Do not pre-score.
+
+v0.2.1 changes to this schema: `claimed_k` and `claimed_rate` may be `null` for continuous-metric cells; the ensemble directory keeps the unmodified script's saved stdout, named and hashed in the manifest; the top-target tie rule is stated; catharsis events carry the received-aggression vectors before and after zeroing; the toy example is now the official `record_metrics` output for stated aggression snapshots (its step-0 agreement, gini, entropy, and convergence-ratio values were wrong in v0.2). Table 2 traces exported under v0.2 remain valid: the judge accepts `contract_version` `"0.2"` or `"0.2.1"`.
 
 `trial_id` = `{ensemble_id}-g{gamma}-N{N}-v{variant}-s{seed}`
 
@@ -16,13 +18,14 @@ eval/traces/v0.2/
     manifest.json
     trials/<trial_id>.json
     trials/<trial_id>.npz    # optional; only if series are not inline
+    script_stdout.txt        # verbatim stdout of the unmodified published script for this run
 ```
 
 ## manifest.json (required)
 
 ```json
 {
-  "contract_version": "0.2",
+  "contract_version": "0.2.1",
   "ensemble_id": "table2",
   "paper": "Black 2026, A Computational Test of Girard's Scapegoat Mechanism",
   "draft": "18",
@@ -47,11 +50,15 @@ eval/traces/v0.2/
       "claimed_median_t95": 421,
       "trial_ids": ["table2-g1.02-N50-vAC-s42"]
     }
-  ]
+  ],
+  "script_stdout_file": "script_stdout.txt",
+  "script_stdout_sha256": "<sha256 of script_stdout.txt>"
 }
 ```
 
-`cells` is required. Each cell is one published (table, N, gamma, variant) group. `claimed_k` is the published converged or generative count. `claimed_rate` is `claimed_k / n`. `claimed_median_t95` is required when the paper prints it, else `null`. `trial_ids` on a cell lists the trials that belong to it.
+`cells` is required. Each cell is one published (table, N, gamma, variant) group. `claimed_k` is the published converged or generative count. `claimed_rate` is `claimed_k / n`. Both are `null` for a cell whose published value is a continuous metric with no count, as in C-T1 (mean fractional drop); the judge then reports the metric against the published value and attaches no binomial interval. `claimed_median_t95` is required when the paper prints it, else `null`. `trial_ids` on a cell lists the trials that belong to it.
+
+`script_stdout_file` names the verbatim standard output of the unmodified published script for this ensemble run, saved inside the ensemble directory; `script_stdout_sha256` is its SHA-256. Do not edit, trim, or transcribe it: the judge parses the script's own printed table (for Table 2, the row format of `reproduce_table_2.py`'s print statement) and compares every printed field with its recomputation from the traces. Both fields are required for an official verdict from v0.2.1 on; without them the judge marks its verdict provisional.
 
 ## Trial JSON: required metadata
 
@@ -59,7 +66,7 @@ Every field below is required. Use `null` where a field does not apply (never om
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| contract_version | string | `"0.2"` |
+| contract_version | string | `"0.2.1"` (`"0.2"` accepted for Table 2 traces exported under v0.2) |
 | trial_id | string | as above |
 | ensemble_id | string | `table2`, `table2b`, `table10`, `table11`, `table1`, or a clearly labeled extension id |
 | script | string | published script name |
@@ -106,13 +113,13 @@ All 1-d arrays have length `steps_completed`. `t[i]` is the completed-step index
 | system_tension | [T] number | yes | M_t = sum_v R(v) over living agents |
 | modal_agreement | [T] number | yes | D1 |
 | eligible_count | [T] int | yes | \|A_t\| |
-| eligible_ids | [T][eligible_count[t]] int | yes | ids in A_t, same order as top_targets |
-| top_targets | [T][eligible_count[t]] int | yes | T_i for eligible_ids[t][i]; self-targeting excluded |
-| received_aggression | [T][n_alive[t]] number | yes | R(v) for alive_ids[t][i]; enough to recompute M and D6 |
-| aggression_gini | [T] number | yes | |
-| top_target_share | [T] number | yes | also called aggression_max_share |
-| convergence_ratio | [T] number | yes | as the official `record_metrics` writes it |
-| aggression_entropy | [T] number | yes | |
+| eligible_ids | [T][eligible_count[t]] int | yes | ids in A_t, unique, a subset of `alive_ids[t]`, same order as top_targets |
+| top_targets | [T][eligible_count[t]] int | yes | T_i for `eligible_ids[t][i]`, a member of `alive_ids[t]`; self-targeting excluded; ties go to the first living target in alive order (`np.argmax`, as `record_metrics`) |
+| received_aggression | [T][n_alive[t]] number | yes | R(v) for `alive_ids[t][i]` at the end of the step; enough to recompute M |
+| aggression_gini | [T] number | yes | official `_gini` of `received_aggression[t]` |
+| top_target_share | [T] number | yes | max R / sum R (official `aggression_max_share`) |
+| convergence_ratio | [T] number | yes | largest R / second-largest R, as the official `record_metrics` writes it (not an agreement value) |
+| aggression_entropy | [T] number | yes | Shannon entropy, base 2, of `received_aggression[t]` (official `_entropy`) |
 | top_R | [T] number | yes | max received aggression among living |
 | mean_R | [T] number | yes | mean received aggression among living |
 | modal_target_id | [T] int or null | optional | t* at that step; null if A_t is empty |
@@ -134,10 +141,15 @@ All three fields required. `step` is the same index as `t`. `received_aggression
 `catharsis_events`: list of objects, one per expulsion, same order.
 
 ```json
-{"step": 117, "victim_id": 4, "M_pre": 40.0, "M_post": 28.16, "fractional_drop": 0.296}
+{"step": 117, "victim_id": 4, "M_pre": 40.0, "M_post": 28.16, "fractional_drop": 0.296,
+ "event_alive_ids": [0, 1, 2, 3, 4, 5],
+ "received_aggression_pre": [6.1, 5.0, 4.2, 3.9, 8.31, 12.49],
+ "received_aggression_post": [5.2, 4.4, 3.6, 3.5, 0.0, 11.46]}
 ```
 
-All five fields required when the list is nonempty. `M_pre` and `M_post` are system tension before and after zeroing aggression to and from the expelled agent (D6). They are not the expulsion threshold. `fractional_drop = (M_pre - M_post) / M_pre`, or 0 if M_pre == 0 (code also floors at 0). Horizon k = 0 only. For unanimity-triggered runs that bypass `step_expulsion`, compute this the same way `step_expulsion` does (post-decay, pre- vs post-zeroing).
+All eight fields required when the list is nonempty. `M_pre` and `M_post` are system tension before and after zeroing aggression to and from the expelled agent (D6). They are not the expulsion threshold. `fractional_drop = (M_pre - M_post) / M_pre`, or 0 if M_pre == 0 (code also floors at 0). Horizon k = 0 only. For unanimity-triggered runs that bypass `step_expulsion`, compute this the same way `step_expulsion` does (post-decay, pre- vs post-zeroing).
+
+`event_alive_ids` lists L_t at the instant of the event, including the victim. `received_aggression_pre` and `received_aggression_post` give R(v) for `event_alive_ids[i]` immediately before and immediately after the zeroing, inside the step, so they are not the end-of-step `received_aggression` series. They let the judge check D6 independently of the summary numbers: `M_pre == sum(received_aggression_pre)`, `M_post == sum(received_aggression_post)`, the victim's post value is 0, no post value exceeds its pre value, and `fractional_drop` follows from the two sums. Without them, a wrong `M_pre` or `M_post` would produce a wrong catharsis mean that nothing in the trace could catch. These three fields are needed only for traces with expulsions (Table 1, Table 10, and other expulsion runs), and must be exported before those ensembles are run.
 
 For Table 2 and 2b, both lists are `[]`.
 
@@ -183,7 +195,7 @@ A real Table 2 trial has N=50 and 600 steps; only the lengths change. This objec
 
 ```json
 {
-  "contract_version": "0.2",
+  "contract_version": "0.2.1",
   "trial_id": "table2-g1.02-N5-vAC-s42",
   "ensemble_id": "table2",
   "script": "reproduce_table_2.py",
@@ -218,15 +230,15 @@ A real Table 2 trial has N=50 and 600 steps; only the lengths change. This objec
     "n_alive": [5, 5, 5],
     "alive_ids": [[0, 1, 2, 3, 4], [0, 1, 2, 3, 4], [0, 1, 2, 3, 4]],
     "system_tension": [1.0, 1.2, 1.5],
-    "modal_agreement": [0.4, 0.6, 0.8],
+    "modal_agreement": [0.8, 0.6, 0.8],
     "eligible_count": [5, 5, 5],
     "eligible_ids": [[0, 1, 2, 3, 4], [0, 1, 2, 3, 4], [0, 1, 2, 3, 4]],
     "top_targets": [[1, 0, 0, 0, 0], [1, 0, 0, 0, 1], [1, 0, 0, 0, 0]],
     "received_aggression": [[0.5, 0.2, 0.1, 0.1, 0.1], [0.6, 0.2, 0.15, 0.15, 0.1], [0.8, 0.2, 0.2, 0.15, 0.15]],
-    "aggression_gini": [0.2, 0.25, 0.3],
-    "top_target_share": [0.5, 0.5, 0.53],
-    "convergence_ratio": [0.4, 0.6, 0.8],
-    "aggression_entropy": [1.4, 1.3, 1.2],
+    "aggression_gini": [0.36, 0.35, 0.36],
+    "top_target_share": [0.5, 0.5, 0.5333],
+    "convergence_ratio": [2.5, 3.0, 4.0],
+    "aggression_entropy": [1.961, 1.9796, 1.9232],
     "top_R": [0.5, 0.6, 0.8],
     "mean_R": [0.2, 0.24, 0.3],
     "modal_target_id": [0, 0, 0]
@@ -238,7 +250,7 @@ A real Table 2 trial has N=50 and 600 steps; only the lengths change. This objec
 }
 ```
 
-The numbers in this toy are illustrative, not published results. It is not a real AC trial and must not be copied as one. Official VARIANT_MAP: LM = (object, linear), AC = (object, attention), RL = (status, linear), RA = (status, attention). Real Table 2 trials use official GirardConfig (N=50, k=6, rewire_prob=0.15, alpha=0.15, aggression_decay=0.03, 600 steps) and the SHA actually run. The toy's N=5, 3 steps, and aggression_decay 0.02 are labeled illustration only.
+The numbers in this toy are not published results. It is not a real AC trial and must not be copied as one. They are, however, real outputs: every per-step value is what the official `record_metrics` (girard_2x2_v3.py at the pinned SHA) writes for three small aggression snapshots, rounded to at most 4 decimals. The snapshots are in `eval/judge/test_against_official.py`, which runs the official code on them and checks every field of this block against its output. `eval/judge/test_judge.py` also runs the judge's series checks on this block. So the example cannot drift from either the official code or the judge. Step 0 is four votes of five for agent 0, so agreement is 0.8. Official VARIANT_MAP: LM = (object, linear), AC = (object, attention), RL = (status, linear), RA = (status, attention). Real Table 2 trials use official GirardConfig (N=50, k=6, rewire_prob=0.15, alpha=0.15, aggression_decay=0.03, 600 steps) and the SHA actually run. The toy's N=5, 3 steps, and aggression_decay 0.02 are labeled illustration only.
 
 ## NPZ offload (optional)
 
@@ -250,4 +262,6 @@ When `"series": {"$npz": "<trial_id>.npz"}`:
 
 ## What the judge recomputes
 
-From `eligible_ids`, `top_targets`, `n_alive`, and `modal_agreement`, the judge recomputes D1 and D2/D3 (T=10). From `received_aggression`, `alive_ids`, `system_tension`, and catharsis/expulsion events, it recomputes D5 and D6. From `viability` it evaluates D7 for C-T10, and from `viability_D7_paper` it reports D7-paper only. Simulation's own summaries, if present, are not the official score.
+From `eligible_ids`, `top_targets`, `n_alive`, and `modal_agreement`, the judge recomputes D1 and D2/D3 (T=10). From `received_aggression`, `alive_ids`, and `system_tension`, it recomputes D5 and the gini series. From the catharsis events' pre- and post-zeroing vectors it recomputes D6. From `viability` it evaluates D7 for C-T10, and from `viability_D7_paper` it reports D7-paper only. It compares its recomputed counts and medians with `manifest.script_reported`. Simulation's own summaries, if present, are not the official score.
+
+Before any recomputation the judge validates structure and identities: every required series is present with the right length and element types; `alive_ids` are unique, within 0..N-1, and as many as `n_alive`; `eligible_ids` are unique members of `alive_ids`; `top_targets` are members of `alive_ids`. A trace that fails any of these is a FAIL, never a crash.

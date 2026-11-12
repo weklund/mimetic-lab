@@ -1,6 +1,24 @@
 # C-T2 judge report: Black 2026, Table 2
 
-## Verdict
+## Status under contract v0.2.1 (2026-11-11)
+
+**C-T2: PASS pending Lab decision on v0.2.1. Not yet official.**
+
+- Under v0.2.1 rule A (a printed number stands for every value that rounds to it), all 13 cells pass. This is a re-score of the per-trial values recorded below (t95, peak modal, final modal, peak gini per seed), produced by `python3 eval/judge/rescore_from_result.py` and checked in `test_judge.py`. It is not a re-run on the traces.
+- At gamma 2.00 the reproduced np.median is 29.5. The paper's 30 and the script's `int()` value 29 are both consistent with it. This is known mismatch 3 in the contract.
+- v0.2.1 was written after this run was seen. It is a contract amendment that needs a Lab decision; agreement between Simulation and Proofs does not settle it.
+
+Remaining for an official verdict:
+
+1. A Lab decision on contract v0.2.1, recorded as described in the contract's Roles section.
+2. The 104 trial files archived in this repo (Git LFS) or a release, and `python3 eval/judge/check_trace_hashes.py eval/traces/v0.2/table2` reporting 104/104 identical to the hashes recorded in `table2-result.json`.
+3. The unmodified `reproduce_table_2.py` stdout saved as `script_stdout.txt` with its hash in the manifest, and `python3 eval/judge/judge_table2.py eval/traces/v0.2/table2` (judge v0.2.1) re-run on the archived traces. Without the stdout the judge marks its verdict provisional.
+
+The v0.2.1 judge also enforces checks the v0.2 judge computed but did not apply (tension and gini recomputation) and checks it lacked (agent identities, strict JSON, fail-closed output). On this run the recorded tension and gini discrepancies were 0.0, so they would not change the outcome, but only a re-run on the traces confirms the identity checks.
+
+Everything below is the v0.2 judge's report, unchanged.
+
+## Verdict (judge v0.2)
 
 **C-T2: PASS under the contract's script rule, with one paper mismatch reported.**
 
@@ -66,3 +84,4 @@ No issues. 104 trial files, matching `manifest.trial_ids`, 13 cells of 8. Seeds 
 - Results: `eval/judge/table2-result.json` (also has per-trial values and SHA-256 hashes of each trial file)
 - This report: `eval/judge/table2-report.md`
 - Traces scored: `/workspace/mimetic-lab/eval/traces/v0.2/table2` on the shared box (not in this commit; to be archived with Git LFS)
+- `trace_dir` in `table2-result.json` is that shared-box path. The v0.2.1 judge records paths relative to the repo.
