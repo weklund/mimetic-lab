@@ -1322,8 +1322,10 @@ class Table10BlackRepo(unittest.TestCase):
         """Run actual short run_unanimity_triggered at pinned SHA 89e7bbb, check forced-timeout prefix.
         
         Skipped only if Black repo is absent. Must run in CI (Black checked out at BLACK_SHA).
-        Compare forced-timeout incomplete vs completed run of same seed; prefix must equal.
+        Compare incomplete (10 steps) vs completed (20 steps) run of same seed; prefix must equal.
         """
+        import sys
+        import importlib.util
         import black_reference as B
         
         OK, WHY = B.available()
@@ -1333,46 +1335,68 @@ class Table10BlackRepo(unittest.TestCase):
             else:
                 self.skipTest(f"Black repo not available: {WHY}")
         
-        # Load official runner
-        official = B.load()
+        # Import run_unanimity_triggered from Black's small_n_utils.py
+        black_dir = B.checkout_dir()
+        utils_path = os.path.join(black_dir, "small_n_utils.py")
         
-        # Run a short unanimity_triggered simulation
+        spec = importlib.util.spec_from_file_location("small_n_utils", utils_path)
+        small_n_utils = importlib.util.module_from_spec(spec)
+        sys.modules["small_n_utils"] = small_n_utils
+        spec.loader.exec_module(small_n_utils)
+        
+        run_unanimity_triggered = small_n_utils.run_unanimity_triggered
+        
+        # Run two short simulations with same seed
         seed = 42
-        n_steps_short = 20
         N = 5
         gamma = 1.05
+        variant = "AC"
         
-        # Run incomplete (forced timeout at step 10)
-        incomplete_series, incomplete_events = official.run_unanimity_triggered(
-            seed=seed, N=N, gamma=gamma, n_steps=10, 
-            expulsion_mode="unanimity_adaptive", timeout_seconds=None
+        # Run incomplete (10 steps)
+        result_10 = run_unanimity_triggered(
+            n_agents=N, gamma=gamma, variant=variant, n_steps=10,
+            seed=seed, cooldown=5, record_history=True, timeout_seconds=None
         )
         
-        # Run complete (to step 20)
-        complete_series, complete_events = official.run_unanimity_triggered(
-            seed=seed, N=N, gamma=gamma, n_steps=n_steps_short,
-            expulsion_mode="unanimity_adaptive", timeout_seconds=None
+        # Run complete (20 steps)
+        result_20 = run_unanimity_triggered(
+            n_agents=N, gamma=gamma, variant=variant, n_steps=20,
+            seed=seed, cooldown=5, record_history=True, timeout_seconds=None
         )
         
-        # Check that prefix matches
-        for key in incomplete_series:
-            if key in complete_series:
-                incomplete_arr = incomplete_series[key]
-                complete_arr = complete_series[key]
-                
-                # Compare prefix (first 10 steps)
-                if isinstance(incomplete_arr, list) and isinstance(complete_arr, list):
-                    self.assertEqual(len(incomplete_arr), 10, f"{key} incomplete should have 10 steps")
-                    self.assertGreaterEqual(len(complete_arr), 10, f"{key} complete should have >= 10 steps")
-                    
-                    # Check prefix equality
-                    for i in range(10):
-                        if isinstance(incomplete_arr[i], list):
-                            self.assertEqual(incomplete_arr[i], complete_arr[i], 
-                                           f"{key}[{i}] prefix mismatch")
-                        else:
-                            self.assertEqual(incomplete_arr[i], complete_arr[i],
-                                           f"{key}[{i}] prefix mismatch")
+        # Check that both completed their requested steps
+        self.assertEqual(result_10["steps_completed"], 10)
+        self.assertEqual(result_20["steps_completed"], 20)
+        self.assertFalse(result_10.get("timed_out", False))
+        self.assertFalse(result_20.get("timed_out", False))
+        
+        # Compare modal_series prefix (first 10 steps)
+        modal_10 = result_10.get("modal_series", [])
+        modal_20 = result_20.get("modal_series", [])
+        
+        self.assertEqual(len(modal_10), 10, "10-step run should have 10 modal_series values")
+        self.assertGreaterEqual(len(modal_20), 10, "20-step run should have >= 10 modal_series values")
+        
+        # Prefix must equal
+        for i in range(10):
+            self.assertEqual(modal_10[i], modal_20[i], 
+                           f"modal_series[{i}] prefix mismatch: {modal_10[i]} != {modal_20[i]}")
+        
+        # Compare alive_counts prefix
+        alive_10 = result_10.get("alive_counts", [])
+        alive_20 = result_20.get("alive_counts", [])
+        
+        if alive_10 and alive_20:
+            for i in range(min(10, len(alive_10), len(alive_20))):
+                self.assertEqual(alive_10[i], alive_20[i],
+                               f"alive_counts[{i}] prefix mismatch")
+        
+        # Compare expulsion_steps (events with step < 10)
+        expulsions_10 = [s for s in result_10.get("expulsion_steps", []) if s < 10]
+        expulsions_20 = [s for s in result_20.get("expulsion_steps", []) if s < 10]
+        
+        self.assertEqual(expulsions_10, expulsions_20,
+                        "expulsion_steps in prefix [0, 10) must match")
 
 
 class Table10ViabilityD7(unittest.TestCase):
