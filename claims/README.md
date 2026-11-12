@@ -1,6 +1,6 @@
 # Claim map: scheme and rules
 
-Status: draft v0.2.3, 2026-11-12. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
+Status: draft v0.2.4, 2026-11-12. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
 
 ## Epistemic limit
 
@@ -20,7 +20,8 @@ When this scheme was written (vault checked 2026-11-11, commit 62e9777), the Sec
 | `kind` | `textual` (claim about what a text says), `empirical` (about the world), `model` (about a stated model), `theorem` (provable in a stated formal system). |
 | `statement` | Wording precise enough to pass or fail. |
 | `source` | Work, edition, page or section. Mark `locator: incomplete` when not checked against the primary text. |
-| `assumptions` | What the claim needs to hold. |
+| `assumptions` | What the claim needs to hold. For a Black claim, each listed assumption is classified as from Girard (with locator), Black's addition, or a modeling convenience. |
+| `depends_on` | Optional. The claim IDs and named assumptions the conclusion uses. Each item is a map with either `claim` (an ID) or `assumption` (a short name also explained in `assumptions`), plus `origin` (`girard`, `black-addition`, or `modeling-convenience`) and `role` (`assumed-not-tested`, `load-bearing`, or `setup`). An optional `evidence` field cites opened-source support. Independent labeled-extension reruns and formal counterexamples may be added later without changing this scheme. |
 | `counterexample` | What observation, run, or proof would make it fail. |
 | `formalization_delta` | For each existing model: what it drops, adds, or weakens relative to the source claim. |
 | `status` | `stated`, `locator-incomplete`, `reported-by-source`, `reproduced`, `failed-reproduction`, `proved-in-lean`, `refuted`. |
