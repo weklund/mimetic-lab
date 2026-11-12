@@ -26,11 +26,14 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from judge_common import check_v022_required_fields
+
 JUDGE_VERSION = "0.2.1"
 CONTRACT = "eval contract v0.2.1, C-T2"
 # Table 2 traces exported under v0.2 are valid v0.2.1 traces: v0.2.1 changed scoring
 # rules and added optional manifest fields, not the Table 2 trial schema.
-ACCEPTED_TRACE_VERSIONS = ("0.2", "0.2.1")
+# v0.2.2 adds timeout handling, rerun metadata, and determinism checks (for Table 10).
+ACCEPTED_TRACE_VERSIONS = ("0.2", "0.2.1", "0.2.2")
 
 # Default traces live under the repo (often via Git LFS, not ordinary git blobs).
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -98,6 +101,9 @@ ISSUE_CODES = {
     "gini.series": "Recorded aggression_gini differs from the official gini of received_aggression.",
     "script.stdout": "The saved script stdout is missing, fails its SHA-256, or cannot be parsed.",
     "script.row": "A row of the unmodified script's printed table differs from the judge's recomputation.",
+    "v022.incomplete": "An incomplete trial (timed_out or steps_completed != n_steps_planned) after allowed rerun.",
+    "v022.multiple_reruns": "More than one labeled rerun for the same seed.",
+    "v022.determinism": "Incomplete trial's per-step arrays do not match the completed rerun's prefix.",
 }
 
 SERIES_1D = ["t", "n_alive", "system_tension", "modal_agreement", "eligible_count", "aggression_gini"]
@@ -391,9 +397,15 @@ def check_metadata(tr, stem, spec=TABLE2):
     tid = tr.get("trial_id")
     if tid != stem:
         issues.add("trial.metadata", f"trial_id {tid!r} != filename")
-    if tr.get("contract_version") not in ACCEPTED_TRACE_VERSIONS:
+    contract_version = tr.get("contract_version")
+    if contract_version not in ACCEPTED_TRACE_VERSIONS:
         issues.add("trial.metadata",
-                   f"contract_version={tr.get('contract_version')!r} not in {ACCEPTED_TRACE_VERSIONS}")
+                   f"contract_version={contract_version!r} not in {ACCEPTED_TRACE_VERSIONS}")
+    
+    # For v0.2.2, check required fields (timeout_seconds, host, rerun_of)
+    if contract_version == "0.2.2":
+        check_v022_required_fields(tr, issues.items, where=stem)
+    
     for key, val in spec.expect.items():
         if key not in tr:
             issues.add("trial.metadata", f"missing key {key}")

@@ -34,6 +34,7 @@ import unittest
 import numpy as np
 
 import judge_table2 as J
+import judge_common as JC
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCHEMA = os.path.join(HERE, "..", "trial-schema.md")
@@ -380,6 +381,236 @@ class Documents(unittest.TestCase):
         readme = J.read_bytes(README).decode("utf-8")
         for code in J.ISSUE_CODES:
             self.assertIn(f"`{code}`", readme)
+
+
+# ---------------------------------------------------------------- 5. contract v0.2.2
+
+class ContractV022(unittest.TestCase):
+    """Contract v0.2.2: version acceptance, required fields, incomplete trials."""
+    
+    def test_accepts_v022_version(self):
+        # v0.2.2 should be in ACCEPTED_TRACE_VERSIONS
+        self.assertIn("0.2.2", J.ACCEPTED_TRACE_VERSIONS)
+    
+    def test_trial_complete_check(self):
+        # Complete trial
+        trial = {"timed_out": False, "steps_completed": 600, "n_steps_planned": 600}
+        is_complete, reason = JC.is_trial_complete(trial)
+        self.assertTrue(is_complete)
+        self.assertIsNone(reason)
+        
+        # Timed out trial is incomplete
+        trial = {"timed_out": True, "steps_completed": 400, "n_steps_planned": 600}
+        is_complete, reason = JC.is_trial_complete(trial)
+        self.assertFalse(is_complete)
+        self.assertIn("timed_out=true", reason)
+        
+        # Steps mismatch is incomplete
+        trial = {"timed_out": False, "steps_completed": 400, "n_steps_planned": 600}
+        is_complete, reason = JC.is_trial_complete(trial)
+        self.assertFalse(is_complete)
+        self.assertIn("steps_completed=400 != n_steps_planned=600", reason)
+    
+    def test_v022_required_fields_present(self):
+        trial = {
+            "timeout_seconds": 300.0,
+            "host": "test-host-01",
+            "rerun_of": None
+        }
+        issues = []
+        result = JC.check_v022_required_fields(trial, issues, where="test-trial")
+        self.assertTrue(result)
+        self.assertEqual(len(issues), 0)
+    
+    def test_v022_missing_timeout_seconds(self):
+        trial = {"host": "test-host-01", "rerun_of": None}
+        issues = []
+        result = JC.check_v022_required_fields(trial, issues, where="test-trial")
+        self.assertFalse(result)
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["code"], "trial.metadata")
+        self.assertIn("timeout_seconds", issues[0]["detail"])
+    
+    def test_v022_missing_host(self):
+        trial = {"timeout_seconds": 300.0, "rerun_of": None}
+        issues = []
+        result = JC.check_v022_required_fields(trial, issues, where="test-trial")
+        self.assertFalse(result)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("host", issues[0]["detail"])
+    
+    def test_v022_missing_rerun_of_field(self):
+        trial = {"timeout_seconds": 300.0, "host": "test-host-01"}
+        issues = []
+        result = JC.check_v022_required_fields(trial, issues, where="test-trial")
+        self.assertFalse(result)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("rerun_of", issues[0]["detail"])
+    
+    def test_v022_rerun_of_can_be_null(self):
+        trial = {"timeout_seconds": 300.0, "host": "test-host-01", "rerun_of": None}
+        issues = []
+        result = JC.check_v022_required_fields(trial, issues, where="test-trial")
+        self.assertTrue(result)
+        self.assertEqual(len(issues), 0)
+    
+    def test_v022_rerun_of_can_be_trial_id(self):
+        trial = {
+            "timeout_seconds": 300.0,
+            "host": "test-host-01",
+            "rerun_of": "table10-g1.05-N20-vAC-s42"
+        }
+        issues = []
+        result = JC.check_v022_required_fields(trial, issues, where="test-trial")
+        self.assertTrue(result)
+        self.assertEqual(len(issues), 0)
+    
+    def test_determinism_prefix_check_exact_match(self):
+        incomplete = {
+            "steps_completed": 3,
+            "series": {
+                "modal_agreement": [0.8, 0.6, 0.8],
+                "system_tension": [1.0, 1.2, 1.5]
+            }
+        }
+        complete = {
+            "steps_completed": 5,
+            "series": {
+                "modal_agreement": [0.8, 0.6, 0.8, 0.9, 0.95],
+                "system_tension": [1.0, 1.2, 1.5, 1.8, 2.0]
+            }
+        }
+        # For inline series, trial_dir can be any path (no NPZ files)
+        matches, mismatches = JC.check_determinism_prefix(
+            incomplete, complete, ["modal_agreement", "system_tension"], "."
+        )
+        self.assertTrue(matches)
+        self.assertEqual(len(mismatches), 0)
+    
+    def test_determinism_prefix_check_mismatch(self):
+        incomplete = {
+            "steps_completed": 3,
+            "series": {
+                "modal_agreement": [0.8, 0.6, 0.8],
+                "system_tension": [1.0, 1.2, 1.5]
+            }
+        }
+        complete = {
+            "steps_completed": 5,
+            "series": {
+                "modal_agreement": [0.8, 0.7, 0.8, 0.9, 0.95],  # Different at step 1
+                "system_tension": [1.0, 1.2, 1.5, 1.8, 2.0]
+            }
+        }
+        matches, mismatches = JC.check_determinism_prefix(
+            incomplete, complete, ["modal_agreement", "system_tension"], "."
+        )
+        self.assertFalse(matches)
+        self.assertIn("modal_agreement", mismatches)
+        self.assertNotIn("system_tension", mismatches)
+    
+    def test_determinism_prefix_check_nested_arrays(self):
+        incomplete = {
+            "steps_completed": 2,
+            "series": {
+                "alive_ids": [[0, 1, 2, 3, 4], [0, 1, 2, 3, 4]],
+                "top_targets": [[1, 0, 0, 0, 0], [1, 0, 0, 0, 1]]
+            }
+        }
+        complete = {
+            "steps_completed": 4,
+            "series": {
+                "alive_ids": [[0, 1, 2, 3, 4], [0, 1, 2, 3, 4], [0, 1, 2, 3, 4], [0, 1, 2, 3, 4]],
+                "top_targets": [[1, 0, 0, 0, 0], [1, 0, 0, 0, 1], [1, 0, 0, 0, 0], [1, 0, 0, 0, 0]]
+            }
+        }
+        matches, mismatches = JC.check_determinism_prefix(
+            incomplete, complete, ["alive_ids", "top_targets"], "."
+        )
+        self.assertTrue(matches)
+        self.assertEqual(len(mismatches), 0)
+    
+    def test_determinism_prefix_check_nested_arrays_mismatch(self):
+        incomplete = {
+            "steps_completed": 2,
+            "series": {
+                "alive_ids": [[0, 1, 2, 3, 4], [0, 1, 2, 3, 4]],
+                "top_targets": [[1, 0, 0, 0, 0], [1, 0, 0, 0, 1]]
+            }
+        }
+        complete = {
+            "steps_completed": 4,
+            "series": {
+                "alive_ids": [[0, 1, 2, 3, 4], [0, 1, 2, 3, 4], [0, 1, 2, 3, 4], [0, 1, 2, 3, 4]],
+                "top_targets": [[1, 0, 0, 0, 0], [1, 0, 2, 0, 1], [1, 0, 0, 0, 0], [1, 0, 0, 0, 0]]  # Different at step 1
+            }
+        }
+        matches, mismatches = JC.check_determinism_prefix(
+            incomplete, complete, ["alive_ids", "top_targets"], "."
+        )
+        self.assertFalse(matches)
+        self.assertIn("top_targets", mismatches)
+        self.assertNotIn("alive_ids", mismatches)
+    
+    def test_v022_trial_with_fields_in_ensemble(self):
+        """Test that a v0.2.2 trial with all required fields passes metadata check."""
+        ens, spec = build_ensemble()
+        ens = copy.deepcopy(ens)
+        # Update one trial to v0.2.2 format
+        trial_key = "table2-g2.00-N5-vAC-s42"
+        trial = ens["trials"][trial_key]
+        trial["contract_version"] = "0.2.2"
+        trial["timeout_seconds"] = 600.0
+        trial["host"] = "test-machine-01"
+        trial["rerun_of"] = None
+        
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table2")
+            os.makedirs(os.path.join(traces, "trials"))
+            man = dict(ens["manifest"])
+            man["contract_version"] = "0.2.2"
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(man))
+            
+            for stem, t in ens["trials"].items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(t))
+            
+            # Check that metadata passes for this trial
+            raw = J.read_bytes(os.path.join(traces, "trials", trial_key + ".json"))
+            tr = J.load_json_strict(raw)
+            issues = J.check_metadata(tr, trial_key, spec)
+            
+            # Should pass with no issues
+            self.assertEqual(len(issues), 0, f"Expected no issues, got: {issues}")
+    
+    def test_v022_trial_missing_timeout_seconds_fails(self):
+        """Test that a v0.2.2 trial without timeout_seconds fails metadata check."""
+        ens, spec = build_ensemble()
+        ens = copy.deepcopy(ens)
+        trial_key = "table2-g2.00-N5-vAC-s42"
+        trial = ens["trials"][trial_key]
+        trial["contract_version"] = "0.2.2"
+        # Missing timeout_seconds
+        trial["host"] = "test-machine-01"
+        trial["rerun_of"] = None
+        
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table2")
+            os.makedirs(os.path.join(traces, "trials"))
+            man = dict(ens["manifest"])
+            man["contract_version"] = "0.2.2"
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(man))
+            
+            for stem, t in ens["trials"].items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(t))
+            
+            raw = J.read_bytes(os.path.join(traces, "trials", trial_key + ".json"))
+            tr = J.load_json_strict(raw)
+            issues = J.check_metadata(tr, trial_key, spec)
+            
+            # Should fail with trial.metadata issue about timeout_seconds
+            self.assertGreater(len(issues), 0)
+            self.assertEqual(issues[0]["code"], "trial.metadata")
+            self.assertIn("timeout_seconds", issues[0]["detail"])
 
 
 if __name__ == "__main__":

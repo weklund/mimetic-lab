@@ -12,10 +12,18 @@ clones it), and this module:
    themselves are never run.
 
 The judge's reimplementations are then tested against this code on the same inputs.
+
+load_table10() does the same for the Table 10 runner in small_n_utils.py. Testing the
+runner means running Black's model, so it compiles the model's definitions (imports,
+module constants, GirardConfig, GirardSimulation and the small_n_utils functions) from
+the pinned sources. Module-level code other than definitions is never run, and nothing
+is imported from the checkout by name. The model needs networkx.
 """
 import ast
 import hashlib
 import os
+import sys
+import types
 from collections import defaultdict
 from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple
@@ -26,6 +34,7 @@ PINNED_SHA = "89e7bbb57db62e3c830a8ca672a0805080df3970"
 PINNED_FILES = {
     "reproduce_table_2.py": "675b238d5663c256616b574076005064164264f80e35fd60126f3e0d1960699a",
     "girard_2x2_v3.py": "4c9ffcf6d9118e524da7bce8de55cac5e0b5e3392db5ac349942182cde980be8",
+    "small_n_utils.py": "7306d1d5e9dfbad2d50240f350d1ed499d88fcb97bd919c58a2846160a32c178",
 }
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CHECKOUT = os.path.join(_HERE, "..", ".cache", "mimetic-desire-simulation")
@@ -116,3 +125,63 @@ def load():
     return SimpleNamespace(time_to_95=time_to_95, gini=OfficialMetrics._gini, entropy=OfficialMetrics._entropy,
                            record=record, format_row=format_row, table2_main_source=ast.get_source_segment(
                                t2_src, funcs["main"]))
+
+
+# Top-level statements load_table10 compiles. Anything else at module level is refused.
+_DEFINITION_NODES = (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign)
+
+
+def _definitions(name, skip_import_from=()):
+    """Compile only the definition statements of a pinned source file into a fresh namespace."""
+    tree = ast.parse(_source(name))
+    body = []
+    for node in tree.body:
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+            continue  # docstring
+        if isinstance(node, ast.ImportFrom) and node.module in skip_import_from:
+            continue
+        if not isinstance(node, _DEFINITION_NODES):
+            raise RuntimeError(f"{name}: unexpected top-level {type(node).__name__} at line {node.lineno}")
+        body.append(node)
+    return compile(ast.Module(body=body, type_ignores=[]), name, "exec")
+
+
+def _exec_definitions(name, module_name, inject, skip_import_from=()):
+    """Run a file's definitions in a private module namespace and return that namespace.
+
+    @dataclass looks the class's module up in sys.modules, so the module is registered
+    there only while the definitions run, under a private name, and removed after.
+    """
+    code = _definitions(name, skip_import_from)
+    module = types.ModuleType(module_name)
+    module.__dict__.update(inject)
+    sys.modules[module_name] = module
+    try:
+        exec(code, module.__dict__)
+    finally:
+        sys.modules.pop(module_name, None)
+    return module.__dict__
+
+
+def load_table10():
+    """Return the official Table 10 functions from small_n_utils.py at the pinned SHA.
+
+    adaptive_unanimity_threshold and classify_exhaustion are pure functions.
+    run_unanimity_triggered runs the official model (girard_2x2_v3.GirardSimulation).
+    Call only when available() is ok. Raises RuntimeError if networkx is missing.
+    """
+    ok, reason = available()
+    if not ok:
+        raise RuntimeError(reason)
+    try:
+        import networkx  # noqa: F401  (the official model imports it)
+    except ImportError as exc:
+        raise RuntimeError("networkx is required to run the official Table 10 model") from exc
+
+    model = _exec_definitions("girard_2x2_v3.py", "black_girard_2x2_v3", {})
+    utils = _exec_definitions("small_n_utils.py", "black_small_n_utils",
+                              {k: model[k] for k in ("GirardConfig", "GirardSimulation", "VARIANT_MAP")},
+                              skip_import_from=("girard_2x2_v3",))
+    return SimpleNamespace(adaptive_unanimity_threshold=utils["adaptive_unanimity_threshold"],
+                           classify_exhaustion=utils["classify_exhaustion"],
+                           run_unanimity_triggered=utils["run_unanimity_triggered"])
