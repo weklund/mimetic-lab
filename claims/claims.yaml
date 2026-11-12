@@ -1,10 +1,10 @@
-# Mimetic Lab claim map v0.1.1 (2026-11-11). Scheme: claims/README.md
+# Mimetic Lab claim map v0.2 (2026-11-11). Scheme: claims/README.md
 # No em or en dashes in this file by convention.
 
 milestones:
   M1-black-phase-boundary:
     target: B1
-    needs: [G4, G3, B1, B2, B3]
+    needs: [G4, G3, B1, B2, B3, B4]
   M2-sack-lean:
     target: S1
     needs: [G1, S1]
@@ -157,6 +157,13 @@ claims:
         Weakens to transient catharsis: 95% tension drop, then reconvergence by
         about step 50 (s3.6, tau = 500). Durable peace requires the sacred, which
         the model lacks (s4.3). Self-exhaustion only in a window around N = 15 to 50.
+        Table 10's predicate weakens "durable" further: classify_exhaustion asks for
+        500 silent steps after the last expulsion (min_silence = 500), where s3.11.2
+        prose says 2000+. Black's name for that predicate, "generative founding
+        murder", is his label; the contract calls it self-exhaustion viability (D7, B4).
+        Misrecognition (méconnaissance) of the victim is, on Girard's account, part
+        of what makes the founding murder generative (same source as this claim;
+        locator incomplete). Black's model has none of it.
     status: locator-incomplete
 
   - id: G7
@@ -243,6 +250,37 @@ claims:
     formalization_delta: Adds an assumption (per-agent conservation) that has no stated textual basis in Girard.
     status: reported-by-source
 
+  - id: B4
+    title: Self-exhaustion viability by N (Table 10, reproduction target)
+    priority: P1
+    milestone: M1-black-phase-boundary
+    kind: model
+    stands_in_for: G6
+    statement: >
+      In Black's AC and RA variants with unanimity-triggered expulsion (theta(N) =
+      min(0.95, (N-1)/N), cooldown 5), 5000 steps, seeds 42 + 1000r for r = 0..19,
+      N in {5, 10, ..., 40} and gamma in {1.05, 1.5, 2.0}, the fraction of trials
+      that end in genuine self-exhaustion (classify_exhaustion with min_silence =
+      500, fewer than half the agents expelled, at least one expulsion) matches
+      Table 10 cell by cell: near zero at N = 5, mixed at N = 10, rising between N = 15 and 25 to 80 to 95% in most cells. The pass test is a cell-by-cell match, not this gloss.
+    source:
+      - "Black, draft v18 (Feb 2026), s3.11.2 Table 10, paper/paper_draft_18_github.md in github.com/maxwell-black/mimetic-desire-simulation (HEAD 89e7bbb)."
+      - "Script: exp_small_n_viability.py; predicate: small_n_utils.classify_exhaustion."
+    locator: complete for the GitHub draft; published version not checked
+    assumptions:
+      - min_silence = 500, as the script ran (contract known mismatch 1). The s3.11.2 prose's 2000+ is reported as D7-paper and never scored.
+      - Finite horizon of 5000 steps.
+    counterexample: >
+      A rerun of the pinned code and seeds giving any Table 10 cell a different
+      count out of 20.
+    formalization_delta: >
+      See G6. Black calls the predicate "generative founding murder". It measures
+      self-exhaustion of the expulsion cycle only: no sacred, no myth, no ritual,
+      and no misrecognition of the victim (see G6). min_silence = 500 weakens
+      "durable" relative to the prose. A pass upgrades this claim only, never G6.
+      Contract item: C-T10, P-gen, D7.
+    status: reported-by-source
+
   - id: S1
     title: Convergence of Desire (Sack Theorem 1), first Lean target
     priority: P0
@@ -278,18 +316,30 @@ claims:
       it. Sack's own 3-agent run cycles with period 14 and never reaches
       equilibrium (notes 5-6). The abstract's 'tendency for all agents to converge
       on a single, universal object' is a simulation observation, not Theorem 1.
-    status: stated
+    lean:
+      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 head d0decde (update to the merge commit when merged)"
+      theorems:
+        - "convergence_on_weak_component: this statement, on weak components (equivalence closure of i ~ med i). No axioms."
+        - "convergence_of_desire: Sack's form, on minimum mutual mediator sets."
+      check: "lean/SackTheorem/AxiomAudit.lean pins both theorems' axioms; CI fails on sorryAx."
+    status: proved-in-lean
 
   - id: S2
     title: Non-Identity of Desire (Sack Theorem 2)
     priority: P1
     milestone: M2-sack-lean
     kind: theorem
-    statement: Without object self-links (obj i != i), every node of a component in equilibrium desires a node outside that component.
+    statement: >
+      If no node desires itself (obj i != i for every i), then in equilibrium
+      every node of a minimum mutual mediator set desires a node outside that set.
     source: ["Sack 2021, Appendix, Theorem 2."]
-    assumptions: As S1, plus no self-links.
+    assumptions: As S1, plus no object self-links (no node desires itself).
     counterexample: Formal only.
-    status: stated
+    lean:
+      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 head d0decde (update to the merge commit when merged)"
+      theorems: ["non_identity_of_desire: this statement, on minimum mutual mediator sets (Sack's form)."]
+      note: "This is the form that is proved. A weak-component wording would need the same lemma that keeps S4 at stated, and is not claimed here."
+    status: proved-in-lean
 
   - id: S3
     title: Equilibrium without narcissism exists iff at least two components (Sack Theorem 3)
@@ -300,6 +350,12 @@ claims:
     source: ["Sack 2021, Appendix, Theorem 3."]
     review_flags:
       - "The sketch proves only the 'only if' direction. The 'if' direction needs a construction (component A desires a node of B and every other component desires a node of A); Lean will force it."
+      - "Needs a nonempty node set: for empty N the hypotheses hold vacuously and no partition exists."
+    lean:
+      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 head d0decde (update to the merge commit when merged)"
+      theorems:
+        - "existence_equilibrium_no_narcissism_only_if and _if: Sack's wording, both directions, as proof_wanted (stated, not proved)."
+        - "unique_narcissist_of_weakly_connected (proved, the lab's reading): a weakly connected network in equilibrium has exactly one self-desiring node, which every node desires. This is the key step of 'only if'."
     status: stated
 
   - id: S4
@@ -309,6 +365,10 @@ claims:
     kind: theorem
     statement: In equilibrium, the number of distinct objects is at most the number of weak components of the mediation graph.
     source: ["Sack 2021, Appendix, Theorem 5."]
+    lean:
+      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 head d0decde (update to the merge commit when merged)"
+      theorems: ["number_of_objects_bound (proved): at most the number of parts in any cover of the nodes by minimum mutual mediator sets."]
+      gap: "This statement's weak-component form also needs the lemma that every weak component is a minimum mutual mediator set (not yet proved)."
     status: stated
 
   - id: S5
@@ -383,3 +443,5 @@ claims:
 changelog:
   - "2026-11-11 v0.1: first map. Vault had no prior scheme. Black and Sack sources opened; Girard locators mostly secondhand."
   - "2026-11-11 v0.1.1: redact W1 private-journal verbatim quote from the public map (pending Wes's OK). Status set to stated; confirmation note moved to review_flags."
+  - "2026-11-11 v0.2: S1 and S2 proved-in-lean (PR #2); S3 and S4 stay stated with Lean status recorded; B4 added for Table 10 (contract C-T10, D7) and to M1 needs; G6 delta notes min_silence = 500 and that 'generative founding murder' is Black's label."
+  - "2026-11-11 v0.2 review pass: S2 statement reworded to Sack's minimum mutual mediator set form, matching non_identity_of_desire (status stays proved-in-lean); B4 Table 10 gloss corrected against draft v18 cells (pass test remains cell-by-cell); Girard misrecognition sentence moved from B4 formalization_delta onto G6 with G6's source; W1 redaction from v0.1.1 kept on rebase onto main after PR #3."
