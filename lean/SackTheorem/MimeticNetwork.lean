@@ -395,20 +395,113 @@ theorem existence_equilibrium_no_narcissism_only_if [Nonempty N]
 nonempty, disjoint sets closed under `med`, some object assignment is in equilibrium
 with no node desiring itself.
 
-Sack's sketch proves only the other direction. This one is a short construction: pick
-two parts A and B, let every node of A desire a node of B and every other node desire a
-node of A. Not yet proved. -/
-proof_wanted existence_equilibrium_no_narcissism_if (med : N → N)
+Sack's sketch proves only the other direction. This is a short construction: pick two
+parts A and B, let every node of A desire a fixed node of B and every other node desire
+a fixed node of A. Then obj n ≠ n (because parts are disjoint) and equilibrium holds
+(each part is closed under med). -/
+theorem existence_equilibrium_no_narcissism_if (med : N → N)
     (partition : Finset (Finset N)) (h_card : 2 ≤ partition.card)
     (h_parts : ∀ S ∈ partition, S.Nonempty ∧ ∀ n ∈ S, med n ∈ S)
     (h_disj : ∀ S₁ ∈ partition, ∀ S₂ ∈ partition, S₁ ≠ S₂ → S₁ ∩ S₂ = ∅)
     (h_cover : (Finset.univ : Finset N) = partition.biUnion id) :
-    ∃ obj : N → N, (MimeticNetwork.mk obj med).inEquilibrium ∧ ∀ n, obj n ≠ n
+    ∃ obj : N → N, (MimeticNetwork.mk obj med).inEquilibrium ∧ ∀ n, obj n ≠ n := by
+  classical
+  -- Pick two distinct parts A and B from the partition
+  have h_exists_two : ∃ A ∈ partition, ∃ B ∈ partition, A ≠ B := by
+    by_contra h_not
+    push_neg at h_not
+    -- If no two distinct elements exist, partition has at most 1 element
+    have : partition.card ≤ 1 := by
+      by_contra h_contra
+      push_neg at h_contra
+      have : 2 ≤ partition.card := h_contra
+      have : 1 < partition.card := by omega
+      obtain ⟨A, hA⟩ := Finset.card_pos.mp (Nat.zero_lt_of_lt this)
+      obtain ⟨B, hB⟩ := Finset.card_pos.mp (Nat.zero_lt_of_lt this)
+      by_cases h_eq : A = B
+      · -- Need another element
+        have : ∃ C ∈ partition, C ≠ A := by
+          by_contra h_all_eq
+          push_neg at h_all_eq
+          have : ∀ S ∈ partition, S = A := h_all_eq
+          have : partition = {A} := by
+            ext S
+            simp only [Finset.mem_singleton]
+            constructor
+            · intro hS; exact this S hS
+            · intro hS; rw [hS]; exact hA
+          rw [this] at h_card
+          simp at h_card
+        obtain ⟨C, hC, hCA⟩ := this
+        have : A = C := h_not A hA C hC
+        exact hCA this.symm
+      · have : A = B := h_not A hA B hB
+        rw [this] at h_eq
+        exact absurd rfl h_eq
+    omega
+  obtain ⟨A, hA, B, hB, hAB⟩ := h_exists_two
+  -- A and B are nonempty
+  obtain ⟨hA_nonempty, hA_closed⟩ := h_parts A hA
+  obtain ⟨hB_nonempty, hB_closed⟩ := h_parts B hB
+  -- Pick fixed elements a ∈ A and b ∈ B
+  obtain ⟨a, ha⟩ := hA_nonempty
+  obtain ⟨b, hb⟩ := hB_nonempty
+  -- Define obj: nodes in A desire b, all others desire a
+  let obj : N → N := fun n => if n ∈ A then b else a
+  use obj
+  constructor
+  · -- Prove equilibrium: obj n = obj (med n) for all n
+    intro n
+    simp only [obj, MimeticNetwork.mk]
+    by_cases hn : n ∈ A
+    · -- If n ∈ A, then med n ∈ A (A is closed), so both map to b
+      have hmed : med n ∈ A := hA_closed n hn
+      simp only [hn, hmed, ite_true]
+    · -- If n ∉ A, then n is in some other part S
+      have hn_univ : n ∈ Finset.univ := Finset.mem_univ n
+      rw [h_cover] at hn_univ
+      obtain ⟨S, hS, hn_S⟩ := Finset.mem_biUnion.mp hn_univ
+      have hS_ne_A : S ≠ A := by
+        intro h_eq
+        rw [h_eq] at hn_S
+        exact hn hn_S
+      -- med n ∈ S (S is closed), so med n ∉ A (parts are disjoint)
+      have hmed : med n ∈ S := (h_parts S hS).2 n hn_S
+      have hmed_not_A : med n ∉ A := by
+        intro hmed_A
+        have : med n ∈ A ∩ S := Finset.mem_inter.mpr ⟨hmed_A, hmed⟩
+        have h_disj' := h_disj A hA S hS hS_ne_A.symm
+        rw [h_disj'] at this
+        exact Finset.notMem_empty _ this
+      simp only [hn, hmed_not_A, ite_false]
+  · -- Prove obj n ≠ n for all n
+    intro n
+    simp only [obj]
+    by_cases hn : n ∈ A
+    · -- If n ∈ A, then obj n = b ∈ B, and A ∩ B = ∅
+      simp only [hn, ite_true]
+      intro h_eq
+      subst h_eq
+      have h_disj' := h_disj A hA B hB hAB
+      have : b ∈ A ∩ B := Finset.mem_inter.mpr ⟨hn, hb⟩
+      rw [h_disj'] at this
+      exact Finset.notMem_empty _ this
+    · -- If n ∉ A, then obj n = a ∈ A
+      simp only [hn, ite_false]
+      intro h_eq
+      rw [h_eq] at ha
+      exact hn ha
 
-/-- Theorem 3 "only if" with minimum mutual mediator sets as the parts, the form the
+/-- **Theorem 3 "only if" with minimum mutual mediator sets as the parts**, the form the
 first draft of this file stated. It is equivalent to Sack's form (both say the mediation
-graph has at least two weak components). Not yet proved: it needs the lemma that every
-weak component is a minimum mutual mediator set. -/
+graph has at least two weak components).
+
+This is trickier than the basic form because we need to show that each weak component
+is a minimum mutual mediator set, and that the complement of a weak component can be
+refined into its own weak components. The proof would need to construct all weak components
+as a partition and show each is minimum (cannot be decomposed). Left as `proof_wanted`
+because the complete proof involves technical subtleties with decidability and the
+structure of equivalence closures. -/
 proof_wanted existence_equilibrium_no_narcissism_only_if_minimum [Nonempty N]
     (net : MimeticNetwork N)
     (h_equil : net.inEquilibrium)
