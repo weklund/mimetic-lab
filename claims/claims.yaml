@@ -1,4 +1,4 @@
-# Mimetic Lab claim map v0.1 (2026-11-11). Scheme: claims/README.md
+# Mimetic Lab claim map v0.1.1 (2026-11-11). Scheme: claims/README.md
 # No em or en dashes in this file by convention.
 
 milestones:
@@ -372,11 +372,14 @@ claims:
       differ from a chosen rival still becomes increasingly similar to that rival
       over time (the double), rather than independent of it.
     source:
-      - "Wes, [[2026-10-07 Thiel Lectures and Product Ideas]]: 'in the attempt to not imitate others, he actually finds himself in a mimetic battle with the AntiChrist itself. I wonder if over time he ends up becoming the thing he's so afriad of.'"
+      - "Wes, private journal 2026-10-07 (Second Brain). Paraphrase only, quote withheld pending Wes's OK."
       - "Related Girard: monstrous double, VS p. 161 (via Black); rivals become doubles, Things Hidden / I See Satan (IS p. 22 via Fleming)."
     assumptions: [Similarity is measured on the dimensions the agent attends to in opposing the rival.]
     counterexample: A negative-imitation model where the agent's state decorrelates from the rival's.
-    status: stated (needs Wes's wording)
+    status: stated
+    review_flags:
+      - "Needs Wes's wording and confirmation that this belongs on the program. The note is Wes wondering about a specific person, not yet a general claim. Verbatim quote withheld from the public map pending Wes's OK."
 
 changelog:
   - "2026-11-11 v0.1: first map. Vault had no prior scheme. Black and Sack sources opened; Girard locators mostly secondhand."
+  - "2026-11-11 v0.1.1: redact W1 private-journal verbatim quote from the public map (pending Wes's OK). Status set to stated; confirmation note moved to review_flags."

@@ -1,6 +1,6 @@
 # Claim map: scheme and rules
 
-Status: draft v0.1, 2026-11-11. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
+Status: draft v0.1.1, 2026-11-11. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
 
 ## Epistemic limit
 
@@ -29,5 +29,5 @@ The Second Brain vault (checked 2026-11-11, commit 62e9777) holds no existing cl
 
 1. A `model` or `theorem` claim must name the model it is about and link the `G` or `W` claim it stands in for, with the delta written out.
 2. A passing reproduction or proof upgrades only that `B` or `S` claim. It never upgrades a `G` claim.
-3. Quotes come only from sources someone on the lab actually opened; secondhand page numbers are marked `via`.
+3. Quotes come only from sources someone on the lab actually opened; secondhand page numbers are marked `via`. Private journal wording is not quoted on the public map until Wes says so.
 4. Change log entries go at the bottom of `claims.yaml`.
