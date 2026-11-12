@@ -1422,6 +1422,91 @@ class Table10IDIntegrity(unittest.TestCase):
                  if i["code"] == "trial.metadata" and "alive_ids is not a list" in i["detail"]]
         self.assertGreater(len(issues), 0)
 
+    @patch_n_steps(8)
+    def test_aliased_n_active_agents_with_self_target_fails(self):
+        """BLOCKER 1: n_active_agents alias with self-targets must FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Use n_active_agents alias, remove canonical n_alive
+        trials[trial_id]["series"]["n_active_agents"] = trials[trial_id]["series"]["n_alive"]
+        del trials[trial_id]["series"]["n_alive"]
+        
+        # Step 3: every eligible agent targets itself
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["n_active_agents"][3] = 3
+        trials[trial_id]["series"]["eligible_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["eligible_count"][3] = 3
+        trials[trial_id]["series"]["top_targets"][3] = [0, 1, 2]  # all self-target
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "ids.self_target" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_aliased_eligible_agents_with_self_target_fails(self):
+        """BLOCKER 1: eligible_agents alias with self-targets must FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Use eligible_agents alias, remove canonical eligible_count
+        trials[trial_id]["series"]["eligible_agents"] = trials[trial_id]["series"]["eligible_count"]
+        del trials[trial_id]["series"]["eligible_count"]
+        
+        # Step 3: every eligible agent targets itself
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["n_alive"][3] = 3
+        trials[trial_id]["series"]["eligible_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["eligible_agents"][3] = 3
+        trials[trial_id]["series"]["top_targets"][3] = [0, 1, 2]  # all self-target
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "ids.self_target" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_align_targets_length_mismatch_fails(self):
+        """BLOCKER 2: top_targets length != eligible_ids length must FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Step 3: top_targets length 1, eligible_ids length 3 (agent 0 targets itself)
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["n_alive"][3] = 3
+        trials[trial_id]["series"]["eligible_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["eligible_count"][3] = 3
+        trials[trial_id]["series"]["top_targets"][3] = [0]  # length 1, agent 0 -> 0
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "align.targets" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_non_integer_alive_ids_fails(self):
+        """Should-fix: non-integer IDs must FAIL (series.shape)."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Step 3: alive_ids includes 1.0 (float)
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1.0, 2]
+        trials[trial_id]["series"]["n_alive"][3] = 3
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "series.shape" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
 
 class Table10BlackRepo(unittest.TestCase):
     """Tests requiring Black's official repo at pinned SHA."""

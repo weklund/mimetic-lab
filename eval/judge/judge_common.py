@@ -327,18 +327,26 @@ def check_id_integrity(series, trial_id, n_agents):
     Returns (valid, issues_list) where issues use trial.metadata code.
     Checks all Table 2 ID issues: ids.alive_count, ids.alive_duplicate, ids.alive_outside_population,
     ids.eligible_count, ids.eligible_duplicate, ids.eligible_not_alive, ids.target_not_alive,
-    ids.self_target.
+    ids.self_target, align.targets.
+    Supports contract aliases: n_active_agents ↔ n_alive, eligible_agents ↔ eligible_count.
     """
     issues = []
     
     if not isinstance(series, dict):
         return False, [{"code": "trial.metadata", "where": trial_id, "detail": "series is not a dict"}]
     
-    alive_ids = series.get("alive_ids", [])
-    eligible_ids = series.get("eligible_ids", [])
-    top_targets = series.get("top_targets", [])
-    n_alive = series.get("n_alive", [])
-    eligible_count = series.get("eligible_count", [])
+    # Resolve aliases using _resolve_alias
+    alive_ids_key = _resolve_alias("alive_ids", series)
+    eligible_ids_key = _resolve_alias("eligible_ids", series)
+    top_targets_key = _resolve_alias("top_targets", series)
+    n_alive_key = _resolve_alias("n_alive", series)  # also accepts n_active_agents
+    eligible_count_key = _resolve_alias("eligible_count", series)  # also accepts eligible_agents
+    
+    alive_ids = series.get(alive_ids_key, []) if alive_ids_key else []
+    eligible_ids = series.get(eligible_ids_key, []) if eligible_ids_key else []
+    top_targets = series.get(top_targets_key, []) if top_targets_key else []
+    n_alive = series.get(n_alive_key, []) if n_alive_key else []
+    eligible_count = series.get(eligible_count_key, []) if eligible_count_key else []
     
     # Non-list check: do not silently skip
     if not isinstance(alive_ids, list):
@@ -416,6 +424,31 @@ def check_id_integrity(series, trial_id, n_agents):
             })
             break
         
+        # Check for non-integer IDs (Table 2: series.shape)
+        if not all(_is_int(x) for x in alive):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"series.shape: alive_ids has non-integer at step {t}"
+            })
+            break
+        
+        if not all(_is_int(x) for x in eligible):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"series.shape: eligible_ids has non-integer at step {t}"
+            })
+            break
+        
+        if not all(_is_int(x) for x in tt):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"series.shape: top_targets has non-integer at step {t}"
+            })
+            break
+        
         alive_set = set(alive)
         
         # ids.alive_count
@@ -481,18 +514,26 @@ def check_id_integrity(series, trial_id, n_agents):
             })
             break
         
-        # ids.self_target
-        if len(eligible) == len(tt):
-            for a, b in zip(eligible, tt, strict=True):
-                if a == b:
-                    issues.append({
-                        "code": "trial.metadata",
-                        "where": trial_id,
-                        "detail": f"ids.self_target: eligible agent targets itself at step {t}"
-                    })
-                    break
-            if issues:
+        # align.targets: eligible_ids and top_targets must have same length
+        if len(eligible) != len(tt):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"align.targets: eligible_ids/top_targets length mismatch at step {t}"
+            })
+            break
+        
+        # ids.self_target: only check when aligned
+        for a, b in zip(eligible, tt, strict=True):
+            if a == b:
+                issues.append({
+                    "code": "trial.metadata",
+                    "where": trial_id,
+                    "detail": f"ids.self_target: eligible agent targets itself at step {t}"
+                })
                 break
+        if issues:
+            break
     
     return len(issues) == 0, issues
 
