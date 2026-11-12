@@ -4,6 +4,8 @@ defaultTargets = ["SackTheorem"]
 
 [[lean_lib]]
 name = "SackTheorem"
+# Any warning fails the build, including "declaration uses sorry".
+leanOptions = { warningAsError = true }
 
 [[require]]
 name = "mathlib"

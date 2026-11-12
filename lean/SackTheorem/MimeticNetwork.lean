@@ -1,3 +1,12 @@
+module
+
+public import Mathlib.Data.Fintype.Basic
+public import Mathlib.Data.Finset.Basic
+public import Mathlib.Logic.Relation
+public import Mathlib.Combinatorics.SimpleGraph.Connectivity.Connected
+public import Mathlib.Combinatorics.SimpleGraph.Basic
+public import Batteries.Util.ProofWanted
+
 /-
 Copyright (c) 2026 Wes Eklund. All rights reserved.
 Released under MIT license.
@@ -44,12 +53,7 @@ scarcity, rivalry, crisis, or scapegoat, and nothing here claims otherwise.
    theorem, and CI rejects placeholder proofs outright.
 -/
 
-import Mathlib.Data.Fintype.Basic
-import Mathlib.Data.Finset.Basic
-import Mathlib.Logic.Relation
-import Mathlib.Combinatorics.SimpleGraph.Connectivity.Connected
-import Mathlib.Combinatorics.SimpleGraph.Basic
-import Batteries.Util.ProofWanted
+@[expose] public section
 
 namespace MimeticTheory
 
@@ -480,3 +484,5 @@ theorem number_of_objects_bound (net : MimeticNetwork N)
     exact convergence_of_desire net (g o₂) h_equil (h_partition_mms _ hS₁) x₁ x₂ hx₁ hx₂
 
 end MimeticTheory
+
+end

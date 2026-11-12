@@ -44,7 +44,10 @@ A node may be its own mediator (`med n = n`, Sack's self-mediators) and may desi
 
 - Unproved statements are `proof_wanted` (from Batteries), which nothing can use in a proof.
 - [`SackTheorem/AxiomAudit.lean`](SackTheorem/AxiomAudit.lean) pins, with `#guard_msgs`, the exact axioms each proved theorem depends on. Any `sorryAx`, or any new axiom, fails the build. Add a line there for every new theorem.
+- The library builds with `warningAsError = true` (`lakefile.toml`), so "declaration uses `sorry`", or any other warning, fails the build at the source line.
 - CI also rejects any `sorry` or `admit` in the Lean sources.
+
+The files use Lean's module system (`module`, `public import`, `@[expose] public section`), as Mathlib does. That is what lets the build be warning-free.
 
 ## Building
 
