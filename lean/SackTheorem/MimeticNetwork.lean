@@ -399,20 +399,177 @@ theorem existence_equilibrium_no_narcissism_only_if [Nonempty N]
 nonempty, disjoint sets closed under `med`, some object assignment is in equilibrium
 with no node desiring itself.
 
-Sack's sketch proves only the other direction. This one is a short construction: pick
-two parts A and B, let every node of A desire a node of B and every other node desire a
-node of A. Not yet proved. -/
-proof_wanted existence_equilibrium_no_narcissism_if (med : N → N)
+Sack's sketch proves only the other direction. This is a short construction: pick two
+parts A and B, let every node of A desire a fixed node of B and every other node desire
+a fixed node of A. Then obj n ≠ n (because parts are disjoint) and equilibrium holds
+(each part is closed under med). -/
+theorem existence_equilibrium_no_narcissism_if (med : N → N)
     (partition : Finset (Finset N)) (h_card : 2 ≤ partition.card)
     (h_parts : ∀ S ∈ partition, S.Nonempty ∧ ∀ n ∈ S, med n ∈ S)
     (h_disj : ∀ S₁ ∈ partition, ∀ S₂ ∈ partition, S₁ ≠ S₂ → S₁ ∩ S₂ = ∅)
     (h_cover : (Finset.univ : Finset N) = partition.biUnion id) :
-    ∃ obj : N → N, (MimeticNetwork.mk obj med).inEquilibrium ∧ ∀ n, obj n ≠ n
+    ∃ obj : N → N, (MimeticNetwork.mk obj med).inEquilibrium ∧ ∀ n, obj n ≠ n := by
+  classical
+  -- Pick two distinct parts A and B from the partition (card ≥ 2 ensures they exist)
+  obtain ⟨A, hA, B, hB, hAB⟩ := Finset.one_lt_card.mp h_card
+  -- A and B are nonempty
+  obtain ⟨hA_nonempty, hA_closed⟩ := h_parts A hA
+  obtain ⟨hB_nonempty, hB_closed⟩ := h_parts B hB
+  -- Pick fixed elements a ∈ A and b ∈ B
+  obtain ⟨a, ha⟩ := hA_nonempty
+  obtain ⟨b, hb⟩ := hB_nonempty
+  -- Define obj: nodes in A desire b, all others desire a
+  let obj : N → N := fun n => if n ∈ A then b else a
+  use obj
+  constructor
+  · -- Prove equilibrium: obj n = obj (med n) for all n
+    intro n
+    by_cases hn : n ∈ A
+    · -- If n ∈ A, then med n ∈ A (A is closed), so both map to b
+      have hmed : med n ∈ A := hA_closed n hn
+      show (if n ∈ A then b else a) = (if med n ∈ A then b else a)
+      simp [hn, hmed]
+    · -- If n ∉ A, then n is in some other part S
+      have hn_univ : n ∈ Finset.univ := Finset.mem_univ n
+      rw [h_cover] at hn_univ
+      obtain ⟨S, hS, hn_S⟩ := Finset.mem_biUnion.mp hn_univ
+      have hS_ne_A : S ≠ A := by
+        intro h_eq
+        rw [h_eq] at hn_S
+        exact hn hn_S
+      -- med n ∈ S (S is closed), so med n ∉ A (parts are disjoint)
+      have hmed : med n ∈ S := (h_parts S hS).2 n hn_S
+      have hmed_not_A : med n ∉ A := by
+        intro hmed_A
+        have : med n ∈ A ∩ S := Finset.mem_inter.mpr ⟨hmed_A, hmed⟩
+        have h_disj' := h_disj A hA S hS hS_ne_A.symm
+        rw [h_disj'] at this
+        exact Finset.notMem_empty _ this
+      show (if n ∈ A then b else a) = (if med n ∈ A then b else a)
+      simp [hn, hmed_not_A]
+  · -- Prove obj n ≠ n for all n
+    intro n
+    by_cases hn : n ∈ A
+    · -- If n ∈ A, then obj n = b ∈ B, and A ∩ B = ∅
+      show (if n ∈ A then b else a) ≠ n
+      simp [hn]
+      intro h_eq
+      subst h_eq
+      have h_disj' := h_disj A hA B hB hAB
+      have : b ∈ A ∩ B := Finset.mem_inter.mpr ⟨hn, hb⟩
+      rw [h_disj'] at this
+      exact Finset.notMem_empty _ this
+    · -- If n ∉ A, then obj n = a ∈ A
+      show (if n ∈ A then b else a) ≠ n
+      simp [hn]
+      intro h_eq
+      subst h_eq
+      exact hn ha
 
-/-- Theorem 3 "only if" with minimum mutual mediator sets as the parts, the form the
+/-- **Lemma: Two weak components form a partition.** Given `med : N → N` and two nodes
+`a` and `b` not in the same weak component, the weak component of `a` and its complement
+form a partition into two nonempty, disjoint, med-closed sets. -/
+lemma two_weak_components_yield_partition (med : N → N) (a b : N)
+    (h_not_connected : ¬ Relation.EqvGen (fun i j => med i = j ∨ med j = i) a b) :
+    ∃ (C C_comp : Finset N),
+      (C.Nonempty ∧ ∀ n ∈ C, med n ∈ C) ∧
+      (C_comp.Nonempty ∧ ∀ n ∈ C_comp, med n ∈ C_comp) ∧
+      C ∩ C_comp = ∅ ∧ C ∪ C_comp = Finset.univ := by
+  classical
+  let C := Finset.univ.filter (fun x => Relation.EqvGen (fun i j => med i = j ∨ med j = i) x a)
+  let C_comp := Finset.univ \ C
+  use C, C_comp
+  constructor
+  · constructor
+    · -- C is nonempty: a ∈ C
+      use a
+      simp [C, Relation.EqvGen.refl]
+    · -- C is closed under med
+      intro n hn
+      simp [C] at hn ⊢
+      apply Relation.EqvGen.trans _ n
+      · exact Relation.EqvGen.rel _ _ (Or.inr rfl)
+      · exact hn
+  constructor
+  · constructor
+    · -- C_comp is nonempty: b ∉ C
+      use b
+      simp [C_comp, C]
+      intro hb
+      exact h_not_connected hb.symm
+    · -- C_comp is closed under med
+      intro n hn
+      simp [C_comp, C] at hn ⊢
+      intro hmed
+      apply hn
+      apply Relation.EqvGen.trans _ (med n)
+      · exact Relation.EqvGen.rel _ _ (Or.inl rfl)
+      · exact hmed
+  constructor
+  · -- C and C_comp are disjoint
+    exact Finset.inter_sdiff_self _ _
+  · -- C and C_comp cover univ
+    exact Finset.union_sdiff_of_subset (Finset.subset_univ C)
+
+/-- **Sack's Theorem 3, "if", weak-component form (claim S3).** If the mediation graph has
+at least two weak components, some object assignment is in equilibrium with no self-desire.
+
+Proof: two weak components form a partition of the nodes into at least two nonempty,
+disjoint, med-closed sets, then apply `existence_equilibrium_no_narcissism_if`. -/
+theorem existence_equilibrium_no_narcissism_if_weak_components (med : N → N)
+    (h_two : ∃ a b : N, ¬ Relation.EqvGen (fun i j => med i = j ∨ med j = i) a b) :
+    ∃ obj : N → N, (MimeticNetwork.mk obj med).inEquilibrium ∧ ∀ n, obj n ≠ n := by
+  classical
+  obtain ⟨a, b, hab⟩ := h_two
+  obtain ⟨C, C_comp, ⟨hC_nonempty, hC_closed⟩, ⟨hCc_nonempty, hCc_closed⟩, h_disj, h_cover⟩ :=
+    two_weak_components_yield_partition med a b hab
+  let partition : Finset (Finset N) := {C, C_comp}
+  apply existence_equilibrium_no_narcissism_if med partition
+  · -- partition has card 2
+    have hne : C ≠ C_comp := by
+      intro heq
+      have : hC_nonempty.choose ∈ C ∩ C_comp := by
+        rw [Finset.mem_inter]
+        exact ⟨hC_nonempty.choose_spec, heq ▸ hC_nonempty.choose_spec⟩
+      rw [h_disj] at this
+      simp at this
+    rw [Finset.card_pair hne]
+  · -- Each part is nonempty and closed
+    intro S hS
+    simp [partition] at hS
+    cases hS with
+    | inl h => rw [h]; exact ⟨hC_nonempty, hC_closed⟩
+    | inr h => rw [h]; exact ⟨hCc_nonempty, hCc_closed⟩
+  · -- Parts are disjoint
+    intro S₁ hS₁ S₂ hS₂ hne_parts
+    simp [partition] at hS₁ hS₂
+    cases hS₁ with
+    | inl h₁ =>
+      cases hS₂ with
+      | inl h₂ => rw [h₁, h₂] at hne_parts; exact absurd rfl hne_parts
+      | inr h₂ => rw [h₁, h₂]; exact h_disj
+    | inr h₁ =>
+      cases hS₂ with
+      | inl h₂ => rw [h₁, h₂]; rw [Finset.inter_comm]; exact h_disj
+      | inr h₂ => rw [h₁, h₂] at hne_parts; exact absurd rfl hne_parts
+  · -- Parts cover univ
+    ext x
+    rw [Finset.mem_biUnion]
+    have : x ∈ C ∪ C_comp := by rw [h_cover]; exact Finset.mem_univ x
+    rw [Finset.mem_union] at this
+    simp [id_eq, partition]
+    cases this with
+    | inl hx => left; exact hx
+    | inr hx => right; exact hx
+
+/-- **Theorem 3 "only if" with minimum mutual mediator sets as the parts**, the form the
 first draft of this file stated. It is equivalent to Sack's form (both say the mediation
-graph has at least two weak components). Not yet proved: it needs the lemma that every
-weak component is a minimum mutual mediator set. -/
+graph has at least two weak components).
+
+This is trickier than the basic form. The main gap is the lemma that every weak component
+of the mediation graph is a minimum mutual mediator set. With that, the proof would construct
+all weak components as a partition and apply the basic "only if" theorem. Left as `proof_wanted`
+because proving the lemma involves technical work with decidability of equivalence closures. -/
 proof_wanted existence_equilibrium_no_narcissism_only_if_minimum [Nonempty N]
     (net : MimeticNetwork N)
     (h_equil : net.inEquilibrium)
