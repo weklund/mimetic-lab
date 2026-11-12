@@ -90,6 +90,8 @@ claims:
         incomplete). Status-rivalry variants (RL, RA) use a different source
         rule (Appendix C.4) and also do not test G3. A result under this model
         never tests G3.
+    review_flags:
+      - "Open, not settled: G3's statement says hostility does not depend on prior scarcity. Black designates five of eight objects as rivalrous by construction (Appendix A). Whether that exogenous designation is a departure from that clause is not decided on this map (G3 locator incomplete)."
     status: locator-incomplete
 
   - id: G4
@@ -304,9 +306,10 @@ claims:
       - assumption: convergence-threshold
         origin: modeling-convenience
         role: setup
-      - assumption: horizon
+      - assumption: horizon-600
         origin: modeling-convenience
         role: setup
+        evidence: "Tables 1, 1b, and 2 ran 600 steps."
     counterexample: One LM run meeting the criterion under the paper's parameters.
     formalization_delta: >
       This is the claim Black says is not built in. It holds only for the tested
@@ -332,7 +335,7 @@ claims:
       - "Black's addition, the load-bearing contrast: per-agent throughput conservation is present in the full AC operator and absent in the two ablations (raw h^gamma, and the fixed-scale map C h^gamma). Girard never states conservation (s4.1)."
       - "Black's addition, held fixed in the ablations: convexity at gamma = 2 (Table 3 and Appendix D)."
       - "Black's addition, as setup: the same G3 encoding as B1."
-      - "Modeling convenience, and part of Black's arithmetic explanation: hostility signals are mostly below 1 after prestige-weighted averaging, so for gamma > 1 a raw power transform shrinks them (s3.3)."
+      - "Model property (Black's explanation, s3.3): hostility signals are mostly below 1 after prestige-weighted averaging, so for gamma > 1 a raw power transform shrinks them. This is an observed property of the model state, not a modeling choice."
       - "Modeling convenience: N = 50, no expulsion, 600 steps, 8 runs, default topology and alpha (Table 3, Appendix D)."
     depends_on:
       - claim: G3
@@ -386,6 +389,7 @@ claims:
       - claim: G3
         origin: girard
         role: assumed-not-tested
+        note: "AC cells only. RA cells use status-rivalry (Appendix C.4) and do not rest on G3."
       - assumption: throughput-conservation
         origin: black-addition
         role: setup
@@ -399,8 +403,8 @@ claims:
         role: load-bearing
       - assumption: min-silence-500
         origin: modeling-convenience
-        role: load-bearing
-        evidence: "The scored predicate uses min_silence = 500, not the prose's 2000+ (contract known mismatch 1)."
+        role: setup
+        evidence: "Constitutive of the scored predicate (min_silence = 500, not the prose's 2000+; contract known mismatch 1). Not isolated by an ablation, so not load-bearing in the scheme's sense."
       - assumption: horizon-5000
         origin: modeling-convenience
         role: setup
@@ -411,8 +415,9 @@ claims:
       See G6. Black calls the predicate "generative founding murder". It measures
       self-exhaustion of the expulsion cycle only: no sacred, no myth, no ritual,
       and no misrecognition of the victim (see G6). min_silence = 500 weakens
-      "durable" relative to the prose. G3 is assumed, not tested, in these runs
-      as in all Black results. Conservation and convexity are present as in B1
+      "durable" relative to the prose. G3 is assumed, not tested, in the AC
+      cells; RA cells use a different source and also do not test G3.
+      Conservation and convexity are present as in B1
       and are not isolated here. A pass upgrades this claim only, never G6.
       Contract item: C-T10, P-gen, D7.
     review_flags:
@@ -711,3 +716,4 @@ changelog:
   - "2026-11-11 v0.2.2: S3 if direction noted as proved in Lean (PR #11 merge 30b330e): existence_equilibrium_no_narcissism_if (med-closed partition) and existence_equilibrium_no_narcissism_if_weak_components (claim wording, via two_weak_components_yield_partition). The claim statement's only-if is the contrapositive of unique_narcissist_of_weakly_connected. S3 moves to proved-in-lean. Nonempty node set moved from review_flags into assumptions. existence_equilibrium_no_narcissism_only_if_minimum stays proof_wanted and is not required for S3's statement."
   - "2026-11-12 v0.2.3: O5, O6, O7 added for issue #14 readings of G4. O5 (majority period at most 2, on binary labels) is reported-by-source from the opened Goles-Ruz 2015 restatement of Goles-Olivos 1980; the statement is restricted to binary labels because the opened sources are binary or threshold, and the 1983 Poljak and Sůra PDF (the usual multi-opinion citation) was not opened. The 1980 and 1983 PDFs were not opened, so locators stay at article page ranges and no unread theorem numbers are used. O6 (majority can stay split) is stated, with three configurations checked by direct inspection, including a vertex-target example; the vertex-target example uses the majority rule on vertex-valued labels, stated in O6's assumptions, not as the O5 binary rule. O7 (voter-model unanimity) is reported-by-source from opened Aldous-Fill section 14.3 and Cooper et al. arXiv 1204.4106v3, with the schedule named; Donnelly-Welsh is recorded by bibliographic title and page range only. G4 formalization_delta gains Majority-O5-O6 and Voter-O7 keys. G4 status is unchanged. A pass never upgrades G4."
   - "2026-11-12 v0.2.4: Issue #16 assumption audit for Black claims. Every B claim (B1, B2, B3, B4) now classifies its assumptions as from Girard, Black's addition, or a modeling convenience, and has a depends_on list. G3's Black formalization_delta is tightened to the opened Appendix C.4 rule (rho * (1-alpha) * SharedDesire, rho = 0.2) and says plainly that G3 is never tested in any Black result (assumed as an input in object-rivalry runs; not used, and still not tested, in status-rivalry runs). The 'fixed 0.2 increment' wording was less precise than C.4. Load-bearing evidence cited here is Black's own opened Table 3 and Appendix D, still reported-by-source; independent labeled-extension reruns and formal counterexamples (issue #16 step 3) are not this PR. The scheme gains a depends_on field. O5, O6, and O7 are unchanged. G4 and G6 status are unchanged. A pass never upgrades a G. Paes (O1) and G5 are deferred, as the issue marks them lower priority."
+  - "2026-11-12 v0.2.4 review: B4's G3 depends_on is scoped to the AC cells (RA does not rest on G3). B2's horizon is named horizon-600, matching Tables 1, 1b, and 2. B3's below-1 hostility note is classified as a model property, not a modeling convenience. The scheme defines load-bearing (removing it is reported to change the conclusion, with evidence) versus setup, and allows an optional note to scope an entry. B4's min-silence-500 is setup: it is constitutive of the scored predicate, not isolated by an ablation. A review flag on G3 records the open scarcity question (exogenous rivalrous objects versus 'does not depend on prior scarcity'); that question is not settled here."
