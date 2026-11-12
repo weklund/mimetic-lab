@@ -1,80 +1,68 @@
 # Sack's Mimetic Theory: Formal Verification in Lean 4
 
-This directory contains a formalization of theorems from Graham Alexander Sack's paper:
+This directory formalizes the appendix theorems of Graham Alexander Sack's paper:
 
-> Sack, G.A. (2021). Geometries of Desire: Simulating Rene Girard's Mimetic Theory. 
-> In: Yang, Z., von Briesen, E. (eds) Proceedings of the 2020 Conference of The 
-> Computational Social Science Society of the Americas. Springer Proceedings in 
+> Sack, G.A. (2021). Geometries of Desire: Simulating Rene Girard's Mimetic Theory.
+> In: Yang, Z., von Briesen, E. (eds) Proceedings of the 2020 Conference of The
+> Computational Social Science Society of the Americas. Springer Proceedings in
 > Complexity. Springer, Cham. https://doi.org/10.1007/978-3-030-83418-0_13
 
-## What is Proved
+These are claims S1 to S4 in [`claims/claims.yaml`](../claims/claims.yaml). A proof here upgrades only the S claim it proves, never a Girard (G) claim.
 
-### Definitions
+## Epistemic limitations
 
-1. **Mimetic Network**: A finite graph where each node has exactly one outgoing object link and one outgoing mediation link (functions `obj, med : N → N`).
+**This formalization proves theorems about Sack's graph-theoretic model under the stated assumptions. It does NOT prove that Girard's anthropological theory of mimetic desire is empirically true, nor that human desire operates according to these mathematical structures.** A verified model is a verified design; it says nothing about whether people behave like it. The model has no scarcity, rivalry, crisis, or scapegoat, and nothing here claims otherwise.
 
-2. **Equilibrium**: A state where for every node n, the node and its mediator desire the same object: `obj(n) = obj(med(n))`.
+## Definitions
 
-3. **Mutual Mediator Set (MMS)**: A subset closed under the mediation function.
+1. **Mimetic network** (Sack Def. 1): every node has exactly one outgoing object link and one outgoing mediation link (functions `obj, med : N → N`). Objects are nodes; persons and things are not distinguished.
+2. **Equilibrium** (Def. 2): every node desires what its mediator desires, `obj n = obj (med n)`.
+3. **Mutual mediator set, MMS** (Def. 3): a set closed under `med`.
+4. **Minimum MMS** (Def. 4): a nonempty MMS that cannot be partitioned into two nonempty disjoint MMSs. "Minimum" means indecomposable, not smallest: a whole weak component and its mediation cycle alone both qualify. Every theorem below holds under either reading.
 
-4. **Minimum Mutual Mediator Set**: An MMS that cannot be partitioned into two nonempty disjoint MMSs.
+A node may be its own mediator (`med n = n`, Sack's self-mediators) and may desire itself (`obj n = n`, narcissism). Theorems that exclude self-desire say so.
 
-### Theorems
+**Equilibrium is a fixed point, not an attractor.** "Convergence of Desire" means agreement at equilibrium, not convergence over time. Nothing here says any dynamics reach equilibrium, and Sack's own three-agent run cycles and never does (notes 5 and 6).
 
-**Theorem 1 — Convergence of Desire** (Main Result, **COMPLETE PROOF**):
-In equilibrium, all nodes in a minimum mutual mediator set have the same object of desire.
+## Status
 
-**Theorem 2 — Non-Identity of Desire** (**COMPLETE PROOF**):
-If object self-links are not permitted, all nodes in a minimum MMS in equilibrium desire an object outside that set.
+| Sack | Lean name | Status |
+|---|---|---|
+| Theorem 1, Convergence of Desire | `convergence_of_desire` | **Proved.** In equilibrium, all nodes of a minimum MMS desire the same object. |
+| Theorem 1 on weak components (claim S1's wording) | `convergence_on_weak_component` | **Proved.** In equilibrium, nodes in the same weak component of the mediation graph desire the same object. |
+| Theorem 2, Non-Identity of Desire | `non_identity_of_desire` | **Proved.** Without self-desire, every node of a minimum MMS in equilibrium desires a node outside it. |
+| Theorem 3, Existence without Narcissism, "only if" | `existence_equilibrium_no_narcissism_only_if` | **Stated, not proved** (`proof_wanted`). In Sack's words: without self-desire, an equilibrium implies a partition into at least two nonempty disjoint MMSs. Needs `[Nonempty N]`. |
+| Theorem 3, "if" | `existence_equilibrium_no_narcissism_if` | **Stated, not proved** (`proof_wanted`). Sack's sketch does not cover this direction, but it is a short construction: pick two parts A and B; nodes of A desire a node of B, every other node desires a node of A. |
+| Theorem 3 with minimum MMS parts | `existence_equilibrium_no_narcissism_only_if_minimum` | **Stated, not proved** (`proof_wanted`). Equivalent to Sack's form; needs the lemma that every weak component is a minimum MMS. |
+| Theorem 4, Existence with Narcissism | `existence_equilibrium_with_narcissism` | **Proved.** Sack's witness: everyone desires one node, which therefore desires itself. True for a trivial reason; its content is the contrast with Theorem 3. |
+| Theorem 5, Number of Objects | `number_of_objects_bound` | **Proved.** In equilibrium, the number of distinct objects is at most the number of parts in any cover of the nodes by minimum MMSs (disjointness not needed). Claim S4's weak-component form follows once weak components are shown to be minimum MMSs. |
+| (lab's reading, not Sack) | `unique_narcissist_of_weakly_connected` | **Proved.** On a weakly connected mediation graph in equilibrium, exactly one node desires itself and every node desires it. This is why Theorem 3 needs two components once self-desire is excluded. In Girard's vocabulary it is the coquette; that reading is the lab's. |
 
-**Theorem 3 — Existence of Equilibrium without Narcissism** (Statement Only):
-If self-links are not permitted, equilibrium exists iff N can be partitioned into at least two disjoint MMSs. (Sack's sketch proves only the "only if" direction; full iff proof requires additional work.)
+### How "proved" is checked
 
-**Theorem 4 — Existence of Equilibrium with Narcissism** (**COMPLETE PROOF**):
-Given any mediation structure, there exists an object-of-desire assignment that satisfies equilibrium. Proven by constructing a constant obj function (all nodes desire the same object).
+`lake build` succeeds even with a `sorry` in a proof; the first CI run of this formalization passed with four. So "proved" is checked mechanically, not asserted here:
 
-**Theorem 5 — Number of Objects of Desire in Equilibrium** (Statement Only):
-The number of distinct objects of desire in equilibrium is bounded by the number of minimum MMSs in a partition.
-
-## Epistemic Limitations
-
-**This formalization proves theorems about Sack's graph-theoretic model under the stated assumptions. It does NOT prove that Girard's anthropological theory of mimetic desire is empirically true, nor does it validate the claim that human desire operates according to these mathematical structures.**
-
-## Assumptions
-
-The proofs rely on:
-
-1. Nodes are finite (`Fintype N`)
-2. Each node has exactly one outgoing object link and one outgoing mediation link
-3. Equilibrium is defined as: `∀ n, obj(n) = obj(med(n))`
-4. A Minimum MMS is defined by the partition condition (cannot be split into two nonempty disjoint MMSs)
-5. The proof of Theorem 1 uses that minimum implies the underlying undirected mediation graph is connected
+- Unproved statements are `proof_wanted` (from Batteries), which nothing can use in a proof.
+- [`SackTheorem/AxiomAudit.lean`](SackTheorem/AxiomAudit.lean) pins, with `#guard_msgs`, the exact axioms each proved theorem depends on. Any `sorryAx`, or any new axiom, fails the build. Add a line there for every new theorem.
+- CI also rejects any `sorry` or `admit` in the Lean sources.
 
 ## Building
 
-Requires [elan](https://github.com/leanprover/elan) (the Lean version manager) and Lean 4.
+Requires [elan](https://github.com/leanprover/elan) (the Lean version manager). The toolchain is pinned in `lean-toolchain` (Lean and Mathlib `v4.35.0`).
 
 ```bash
-# Install dependencies (done automatically by lake)
-lake update
-
-# Build the project
-lake build
+cd lean
+lake exe cache get   # download prebuilt Mathlib for the pinned manifest
+lake build           # builds the library and the axiom audit
 ```
+
+Run `lake update` only when you mean to move dependencies, and commit the resulting `lake-manifest.json`. CI builds exactly what the manifest pins.
 
 ## Files
 
-- `SackTheorem/MimeticNetwork.lean` — Main formalization
-- `lakefile.toml` — Lake build configuration
-- `lean-toolchain` — Lean version specification
-
-## Gaps
-
-- **existence_equilibrium_no_narcissism_only_if** (Theorem 3): Sack's sketch proves the "only if" direction. The full iff statement requires proving sufficiency (if partitionable, then equilibrium exists).
-
-- **number_of_objects_bound** (Theorem 5): The counting argument is stated but not proven.
-
-**Theorems 1, 2, and 4 are complete with rigorous proofs, no `sorry` statements.**
+- `SackTheorem/MimeticNetwork.lean`: definitions, proofs, and `proof_wanted` statements
+- `SackTheorem/AxiomAudit.lean`: axiom pins for every proved theorem
+- `lakefile.toml`, `lake-manifest.json`, `lean-toolchain`: build configuration
 
 ## License
 

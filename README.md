@@ -8,9 +8,9 @@ A laboratory for experiments in mimetic theory and computational social science.
 
 Lean 4 formalization of theorems from Graham Alexander Sack's "Geometries of Desire: Simulating Rene Girard's Mimetic Theory" (2021).
 
-**Main Result**: Theorem 1 (Convergence of Desire) — In equilibrium, all nodes in a minimum mutual mediator set have the same object of desire.
+**Main result**: Theorem 1 (Convergence of Desire). In equilibrium, all nodes in a minimum mutual mediator set have the same object of desire. This is agreement at a fixed point, not a claim that any dynamics reach it. Theorems 1, 2, 4, and 5 are proved; Theorem 3 is stated in Sack's wording and not yet proved.
 
-See [`lean/README.md`](lean/README.md) for details, build instructions, and epistemic limitations.
+See [`lean/README.md`](lean/README.md) for status, how "proved" is checked, build instructions, and epistemic limitations. Claims S1 to S4 in [`claims/claims.yaml`](claims/claims.yaml) record what each proof does and does not establish.
 
 ### Future Work
 
