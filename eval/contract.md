@@ -1,8 +1,8 @@
-# Evaluation contract v0.2.1
+# Evaluation contract v0.2.2
 
 Mimetic Proofs and Mimetic Simulation. Source of truth: public repo [weklund/mimetic-lab](https://github.com/weklund/mimetic-lab).
 
-**Status: v0.2.1, proposed 2026-11-11. Lab decision on v0.2.1: pending.** v0.2.1 changes how C-T2 is scored after the v0.2 C-T2 run was seen (rule A, known mismatch 3). Until the Lab decides, v0.2 stays in force and C-T2 is recorded as PASS pending that decision. See the changelog.
+**Status: v0.2.2, proposed 2026-11-12.** This is a contract amendment after Table 10 results were seen. Lab will record a formal decision on this PR. v0.2.1 (rule A, after the v0.2 C-T2 run) remains separately pending and this version does not adopt or decide v0.2.1. Until the Lab decides, v0.2 stays in force. See the changelog.
 
 A pass is evidence that a specified model, under stated assumptions and a pinned source SHA, exhibits a specified property. It is not a proof that Girard's anthropology is true, and it is not a verdict on Girard.
 
@@ -76,11 +76,17 @@ The unmodified script's own printed output is compared field by field, as text, 
 2. pct_consumed < 0.50,
 3. n_expulsions >= 1.
 
-Cooldown is 5. Trigger is Use 2 below. **D7-paper** is the same three conditions with `min_silence=2000`, matching section 3.11.2. It is reported on every Table 10 trial and is not the Table 10 predicate.
+Cooldown is 5. Trigger is Use 2 below. See Incomplete trials (wall-clock timeout) for the handling of incomplete trials. **D7-paper** is the same three conditions with `min_silence=2000`, matching section 3.11.2. It is reported on every Table 10 trial and is not the Table 10 predicate.
 
 The label is Black's. In Girard, the founding murder is generative because the killing founds the sacred, myth, and ritual, and because the community does not know it has a scapegoat. D7 measures none of these; the model has no sacred (G6's Black-2026 delta). It also weakens "durable": D7 asks for 500 silent steps where section 3.11.2's prose says 2000+. A D7 pass upgrades B4, not G6.
 
 A **trial** is one seeded run: the tuple (script, variant, N, gamma, seed).
+
+## Incomplete trials (wall-clock timeout)
+
+A wall-clock timeout in `run_unanimity_triggered` is a hang safety net, not a theoretical outcome. The official docstring already says that. A trial that stops on that net is incomplete and is not a cell outcome. The official trial is a run of the same pinned SHA, script, and seed that completes all `n_steps_planned` steps. Pass/fail does not use `status == timeout` as a D7 or cell result. If a completed rerun is needed, it is labeled in the manifest, and the incomplete run is cited only in a fact note. If a seed still cannot complete after a labeled rerun, it remains incomplete and is reported, not scored as a timeout outcome.
+
+This rule applies to C-T10 and to any ensemble that uses official `run_unanimity_triggered`. It is a general rule about incomplete trials, not a rule written to pick a cell result.
 
 ## Properties
 
@@ -108,7 +114,7 @@ Official seeds: `42 + r * 1000`. Variant is AC unless noted. Reproduction pass i
 
 Sharpening passes if that pattern holds (fuzzy interval at N=50, step between 1.02 and 1.03 at N >= 100). Also check published median t95 at gamma=1.05: 88, 98, 102 for N=50, 100, 200, under rule A. Table 2b as printed stops at N=200. The README and Section 3.11.3 mention N=500, but there is no official no-expulsion sweep at N=500 in the published repo; see C-composite. C-T2b is the first ensemble target for the boundary claim, not C-T2.
 
-**C-T10 (reproduce Table 10).** Script `exp_small_n_viability.py`: AC and RA, N in {5, 10, 15, 20, 25, 30, 35, 40}, gamma in {1.05, 1.5, 2.0}, 20 seeds, 5000 steps, Use 2, cooldown 5. Viability index = fraction of trials satisfying D7. Pass iff each cell, as k/20, matches the published percent:
+**C-T10 (reproduce Table 10).** Script `exp_small_n_viability.py`: AC and RA, N in {5, 10, 15, 20, 25, 30, 35, 40}, gamma in {1.05, 1.5, 2.0}, 20 seeds, 5000 steps, Use 2, cooldown 5. Viability index = fraction of trials satisfying D7. See Incomplete trials (wall-clock timeout) for the handling of timeouts. Pass iff each cell, as k/20, matches the published percent:
 
 - AC 1.05: 25, 75, 65, 90, 95, 85, 85, 90
 - AC 1.50: 0, 0, 55, 60, 90, 85, 95, 95
@@ -155,7 +161,7 @@ eval/summaries/<ensemble_id>.json   # optional claimed-vs-reproduced notes
 
 **manifest.json**
 
-- contract_version: `"0.2.1"` (`"0.2"` accepted for Table 2 traces exported under v0.2)
+- contract_version: `"0.2.2"` for ensembles exported under this amendment; `"0.2.1"` and `"0.2"` remain accepted for traces already exported under them
 - ensemble_id, paper (`Black 2026, A Computational Test of Girard's Scapegoat Mechanism`), draft (`18`)
 - source_repo, source_sha (full SHA actually run)
 - script, python_version, packages (numpy, networkx, scipy at least)
@@ -171,7 +177,7 @@ eval/summaries/<ensemble_id>.json   # optional claimed-vs-reproduced notes
 - N, k, rewire_prob, alpha, gamma, aggression_decay
 - expulsion_mode (`none` | `threshold` | `unanimity_adaptive`)
 - expulsion_threshold (null if none), unanimity_threshold (null if none), unanimity_cooldown (null if none)
-- n_steps_planned, steps_completed, seed, timed_out
+- n_steps_planned, steps_completed, seed, timed_out (see Incomplete trials (wall-clock timeout) for handling of incomplete runs)
 - python_version, packages, command, started_at, ended_at
 
 **Per-step arrays** (length = steps_completed; enough for Proofs to recompute D1 and D2 independently). Field names may be either the code names or the names below; the manifest or trial must be consistent, and the judge accepts this mapping:
@@ -209,7 +215,7 @@ For Table 2 / 2b, both lists are empty and `viability` is null.
 
 - n_expulsions, pct_consumed, n_alive, status, self_exhausted, first_peace, first_reconverge, peak_modal, n_fragments, largest_fragment, expulsion_steps, med_gap
 
-`status` is exactly one of: `genuine_exhaustion`, `still_cycling`, `censored`, `no_expulsions`, `timeout`.
+`status` is exactly one of: `genuine_exhaustion`, `still_cycling`, `censored`, `no_expulsions`, `timeout`. See Incomplete trials (wall-clock timeout) for the handling of `timeout` status.
 
 **Archive.** Traces that back an official verdict are committed under `eval/traces/` through Git LFS (see `.gitattributes`), or attached to a GitHub release, with their SHA-256 recorded in the judge result. `eval/judge/check_trace_hashes.py` confirms the archived files are the ones scored.
 
@@ -235,3 +241,4 @@ Each judge:
 
 - 2026-11-11 v0.2: first agreed contract; C-T2 judge and result.
 - 2026-11-11 v0.2.1 (proposed; Lab decision pending). **Changed after the v0.2 C-T2 run was seen:** rule A for printed numbers replaces exact equality with printed integers and 3-decimal strings; known mismatch 3 (Table 2 median at gamma 2.00). Also: amendment and Lab sign-off rules in Roles; claim-map links; D1 tie rule and exact ceiling; known mismatch 2 qualified; D7 and P-gen relabeled as Black's terms, linked to G6 and B4; C-inv-full renamed C-composite and scoped to the 11 tested sizes and two definitions; C-T1 cells may have null counts; script stdout saved and compared field by field; catharsis events carry pre- and post-zeroing vectors; archive and official-verdict conditions; judge requirements (fail closed, issue codes, tests against the official code).
+- 2026-11-12 v0.2.2 (proposed; Lab decision pending). **Contract amendment after Table 10 results were seen.** Incomplete trials (wall-clock timeout): a wall-clock timeout in `run_unanimity_triggered` is a hang safety net, not a cell outcome. An incomplete trial is not used as a D7 or cell result. The official trial completes all `n_steps_planned` steps. If a completed rerun is needed, it is labeled in the manifest, and the incomplete run is cited only in a fact note. If a seed still cannot complete after a labeled rerun, it remains incomplete and is reported, not scored as a timeout outcome. This rule applies to C-T10 and any ensemble using official `run_unanimity_triggered`. It is a general rule about incomplete trials, not a rule written to pick a cell result. v0.2.1 remains separately pending.
