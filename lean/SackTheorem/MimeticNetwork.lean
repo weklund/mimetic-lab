@@ -71,8 +71,110 @@ lemma exists_path_in_minimum_mms (net : MimeticNetwork N) (S : Finset N)
   intro a b
   by_contra h_not_reach
   have h_min_mut := h_min.1
+  have h_nonempty := h_min.2.1
   have h_no_part := h_min.2.2
-  sorry
+  classical
+  let C : Finset N := S.filter (fun n => ∃ (hn : n ∈ S), 
+    (medSymGraph net S).Reachable ⟨n, hn⟩ a)
+  have hC_nonempty : C.Nonempty := by
+    use a.val
+    simp only [C, Finset.mem_filter]
+    exact ⟨a.property, ⟨a.property, SimpleGraph.Reachable.refl a⟩⟩
+  have hC_not_all : C ≠ S := by
+    intro h_eq
+    have hb_in_C : b.val ∈ C := by rw [h_eq]; exact b.property
+    simp only [C, Finset.mem_filter] at hb_in_C
+    obtain ⟨_, hb_wit, hb_reach⟩ := hb_in_C
+    exact h_not_reach (hb_reach.symm)
+  have hC_mut : isMutualMediatorSet net C := by
+    intro x hx
+    simp only [C, Finset.mem_filter] at hx ⊢
+    obtain ⟨hx_S, ⟨hx_S_wit, hx_reach⟩⟩ := hx
+    have hmed_S : net.med x ∈ S := h_min_mut x hx_S
+    refine ⟨hmed_S, ⟨hmed_S, ?_⟩⟩
+    by_cases h_eq : net.med x = x
+    · have : (⟨net.med x, hmed_S⟩ : S) = (⟨x, hx_S_wit⟩ : S) := Subtype.ext h_eq
+      rw [this]
+      exact hx_reach
+    · have h_neq : (⟨x, hx_S_wit⟩ : S) ≠ (⟨net.med x, hmed_S⟩ : S) := by
+        intro h_contra
+        have : x = net.med x := congr_arg Subtype.val h_contra
+        exact h_eq this.symm
+      have h_adj : (medSymGraph net S).Adj ⟨x, hx_S_wit⟩ ⟨net.med x, hmed_S⟩ := by
+        constructor
+        · exact h_neq
+        · left
+          rfl
+      have h_adj_reach := h_adj.symm.reachable
+      exact h_adj_reach.trans hx_reach
+  let C_comp : Finset N := S \ C
+  have hC_comp_mut : isMutualMediatorSet net C_comp := by
+    intro x hx
+    simp only [C_comp, Finset.mem_sdiff, C, Finset.mem_filter] at hx ⊢
+    obtain ⟨hx_S, hx_not_C⟩ := hx
+    have hmed_S : net.med x ∈ S := h_min_mut x hx_S
+    refine ⟨hmed_S, ?_⟩
+    intro hmed_C
+    apply hx_not_C
+    obtain ⟨_, ⟨hmed_S_wit, hmed_reach⟩⟩ := hmed_C
+    refine ⟨hx_S, ⟨hx_S, ?_⟩⟩
+    by_cases h_eq : net.med x = x
+    · have : (⟨x, hx_S⟩ : S) = (⟨net.med x, hmed_S_wit⟩ : S) := Subtype.ext h_eq.symm
+      rw [this]
+      exact hmed_reach
+    · have h_neq : (⟨net.med x, hmed_S_wit⟩ : S) ≠ (⟨x, hx_S⟩ : S) := by
+        intro h_contra
+        have : net.med x = x := congr_arg Subtype.val h_contra
+        exact h_eq this
+      have h_adj : (medSymGraph net S).Adj ⟨net.med x, hmed_S_wit⟩ ⟨x, hx_S⟩ := by
+        constructor
+        · exact h_neq
+        · right
+          rfl
+      have h_adj_reach := h_adj.symm.reachable
+      exact h_adj_reach.trans hmed_reach
+  have hC_comp_nonempty : C_comp.Nonempty := by
+    use b.val
+    simp only [C_comp, Finset.mem_sdiff, C, Finset.mem_filter]
+    refine ⟨b.property, ?_⟩
+    intro ⟨_, ⟨_, hb_reach⟩⟩
+    exact h_not_reach hb_reach.symm
+  have h_disj : C ∩ C_comp = ∅ := by
+    simp only [C_comp, Finset.inter_sdiff_self]
+  have h_union : C ∪ C_comp = S := by
+    ext x
+    simp only [C_comp, Finset.mem_union, Finset.mem_sdiff]
+    constructor
+    · intro h
+      cases h with
+      | inl hC =>
+        simp only [C, Finset.mem_filter] at hC
+        exact hC.1
+      | inr hComp => exact hComp.1
+    · intro hx
+      by_cases hC : x ∈ C
+      · left; exact hC
+      · right; exact ⟨hx, hC⟩
+  exact h_no_part C C_comp hC_nonempty hC_comp_nonempty hC_mut hC_comp_mut h_disj h_union
+
+omit [Fintype N] [DecidableEq N] in
+lemma walk_same_obj (net : MimeticNetwork N) (S : Finset N)
+    (h_equil : net.inEquilibrium) (a b : S) :
+    (medSymGraph net S).Reachable a b → net.obj a.val = net.obj b.val := by
+  intro h_reach
+  rw [SimpleGraph.reachable_iff_reflTransGen] at h_reach
+  induction h_reach with
+  | refl => rfl
+  | tail _ h_adj ih =>
+    rw [ih]
+    clear ih
+    simp only [medSymGraph] at h_adj
+    obtain ⟨_, h_or⟩ := h_adj
+    cases h_or with
+    | inl h =>
+      rw [← h, h_equil]
+    | inr h =>
+      rw [← h, ← h_equil]
 
 theorem convergence_of_desire (net : MimeticNetwork N) (S : Finset N)
     (h_equil : net.inEquilibrium)
@@ -81,7 +183,7 @@ theorem convergence_of_desire (net : MimeticNetwork N) (S : Finset N)
   intro n m hn hm
   have h_preconn := exists_path_in_minimum_mms net S h_min
   have h_reach := h_preconn ⟨n, hn⟩ ⟨m, hm⟩
-  sorry
+  exact walk_same_obj net S h_equil ⟨n, hn⟩ ⟨m, hm⟩ h_reach
 
 theorem non_identity_of_desire (net : MimeticNetwork N) (S : Finset N)
     (h_equil : net.inEquilibrium)
