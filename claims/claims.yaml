@@ -482,17 +482,20 @@ claims:
     milestone: later
     kind: model
     statement: >
-      Under the same strict-majority, keep-own-on-tie rule as O5, unanimity
-      is not inevitable. Two configurations that are split fixed points, checked
-      by direct inspection: (1) the 4-vertex path with binary labels (0,0,1,1);
-      (2) two triangles {0,1,2} and {3,4,5} joined by the edge 2-3, with binary
-      labels (0,0,0,1,1,1). The same two-triangle graph with vertex targets
-      (5,5,5,0,0,0) is a fixed point that is not a single-victim state: each
-      faction targets a member of the other.
+      Under synchronous strict majority of neighbors, keep own on a tie,
+      unanimity is not inevitable. Two binary configurations that are split
+      fixed points under the O5 rule, checked by direct inspection: (1) the
+      4-vertex path with labels (0,0,1,1); (2) two triangles {0,1,2} and
+      {3,4,5} joined by the edge 2-3, with labels (0,0,0,1,1,1). The same
+      two-triangle graph with vertex targets (5,5,5,0,0,0), under the same
+      majority rule extended to vertex-valued labels, is a fixed point that
+      is not a single-victim state: each faction targets a member of the
+      other.
     source:
-      - "The O5 update rule. The three configurations were checked by direct inspection of one step of that rule, not taken from a published table. Lean issue #15 is to confirm the two-triangle example by decide and to prove a general period bound."
+      - "The two binary configurations use the O5 update rule. The vertex-target configuration uses that majority rule on vertex-valued labels, stated from the model's definition, not from an opened source for a period bound. The three configurations were checked by direct inspection of one step of the relevant rule, not taken from a published table. Lean issue #15 is to confirm the two-triangle examples by decide and to prove a general period bound for the binary rule."
     assumptions:
-      - "Same update rule as O5."
+      - "For the two binary examples: the O5 rule (binary labels, synchronous strict majority of neighbors, keep own on a tie)."
+      - "For the vertex-target example: the same majority rule on vertex-valued labels, with no self-targeting. Each agent adopts the target held by a strict majority of its neighbors and keeps its own on a tie. This multi-label rule is stated from the model's definition, not taken from an opened source."
     formalization_delta: >
       Relative to G4: same drops as O5 (discrete targets, deterministic
       majority, no objects or rivalry, no multiplying attraction). This
@@ -506,8 +509,8 @@ claims:
     status: stated
     counterexample: >
       A proof that one of the named configurations is not a fixed point
-      under the O5 rule, or a theorem that every trajectory under that
-      rule reaches unanimity.
+      under the rule stated for it, or a theorem that every trajectory
+      under that rule reaches unanimity.
 
   - id: O7
     title: Voter-model unanimity depends on the update schedule
@@ -577,4 +580,4 @@ changelog:
   - "2026-11-11 v0.2 review pass: S2 statement reworded to Sack's minimum mutual mediator set form, matching non_identity_of_desire (status stays proved-in-lean); B4 Table 10 gloss corrected against draft v18 cells (pass test remains cell-by-cell); Girard misrecognition sentence moved from B4 formalization_delta onto G6 with G6's source; W1 redaction from v0.1.1 kept on rebase onto main after PR #3."
   - "2026-11-11 v0.2.1: S3 only-if noted as proved in Lean (PR #9 merge 560d037, existence_equilibrium_no_narcissism_only_if, Sack's mutual mediator set wording); S3 stays stated until the if direction is also done; Lean file cites for S1, S2, and S4 updated from PR #2 head d0decde to merge d67b670."
   - "2026-11-11 v0.2.2: S3 if direction noted as proved in Lean (PR #11 merge 30b330e): existence_equilibrium_no_narcissism_if (med-closed partition) and existence_equilibrium_no_narcissism_if_weak_components (claim wording, via two_weak_components_yield_partition). The claim statement's only-if is the contrapositive of unique_narcissist_of_weakly_connected. S3 moves to proved-in-lean. Nonempty node set moved from review_flags into assumptions. existence_equilibrium_no_narcissism_only_if_minimum stays proof_wanted and is not required for S3's statement."
-  - "2026-11-12 v0.2.3: O5, O6, O7 added for issue #14 readings of G4. O5 (majority period at most 2, on binary labels) is reported-by-source from the opened Goles-Ruz 2015 restatement of Goles-Olivos 1980; the statement is restricted to binary labels because the opened sources are binary or threshold, and the 1983 Poljak and Sůra PDF (the usual multi-opinion citation) was not opened. The 1980 and 1983 PDFs were not opened, so locators stay at article page ranges and no unread theorem numbers are used. O6 (majority can stay split) is stated, with three configurations checked by direct inspection, including a vertex-target example. O7 (voter-model unanimity) is reported-by-source from opened Aldous-Fill section 14.3 and Cooper et al. arXiv 1204.4106v3, with the schedule named; Donnelly-Welsh is recorded by bibliographic title and page range only. G4 formalization_delta gains Majority-O5-O6 and Voter-O7 keys. G4 status is unchanged. A pass never upgrades G4."
+  - "2026-11-12 v0.2.3: O5, O6, O7 added for issue #14 readings of G4. O5 (majority period at most 2, on binary labels) is reported-by-source from the opened Goles-Ruz 2015 restatement of Goles-Olivos 1980; the statement is restricted to binary labels because the opened sources are binary or threshold, and the 1983 Poljak and Sůra PDF (the usual multi-opinion citation) was not opened. The 1980 and 1983 PDFs were not opened, so locators stay at article page ranges and no unread theorem numbers are used. O6 (majority can stay split) is stated, with three configurations checked by direct inspection, including a vertex-target example; the vertex-target example uses the majority rule on vertex-valued labels, stated in O6's assumptions, not as the O5 binary rule. O7 (voter-model unanimity) is reported-by-source from opened Aldous-Fill section 14.3 and Cooper et al. arXiv 1204.4106v3, with the schedule named; Donnelly-Welsh is recorded by bibliographic title and page range only. G4 formalization_delta gains Majority-O5-O6 and Voter-O7 keys. G4 status is unchanged. A pass never upgrades G4."
