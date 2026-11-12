@@ -9,14 +9,25 @@ These tests verify:
 
 import unittest
 import networkx as nx
-from .majority import (
-    majority_binary_step,
-    majority_vertex_step,
-    enumerate_binary_majority,
-    classify_trajectory
-)
-from .voter import analyze_absorbing_states, test_schedule_dependency
-from .graphs import generate_all_connected_graphs, count_connected_graphs
+
+try:
+    from .majority import (
+        majority_binary_step,
+        majority_vertex_step,
+        enumerate_binary_majority,
+        classify_trajectory
+    )
+    from .voter import analyze_absorbing_states, test_schedule_dependency
+    from .graphs import generate_all_connected_graphs, count_connected_graphs
+except ImportError:
+    from eval.enumeration.majority import (
+        majority_binary_step,
+        majority_vertex_step,
+        enumerate_binary_majority,
+        classify_trajectory
+    )
+    from eval.enumeration.voter import analyze_absorbing_states, test_schedule_dependency
+    from eval.enumeration.graphs import generate_all_connected_graphs, count_connected_graphs
 
 
 class TestO6NamedConfigurations(unittest.TestCase):
