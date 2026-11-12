@@ -1,6 +1,6 @@
 # Claim map: scheme and rules
 
-Status: draft v0.1.1, 2026-11-11. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
+Status: draft v0.2, 2026-11-11. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
 
 ## Epistemic limit
 
@@ -8,7 +8,7 @@ Formal methods can prove that a model behaves as claimed. Simulation can test wh
 
 ## Why this scheme
 
-The Second Brain vault (checked 2026-11-11, commit 62e9777) holds no existing claim map, no notes on Girard, Sack, or Black, and no formalization scheme. The only related page is one journal entry, `[[2026-10-07 Thiel Lectures and Product Ideas]]`. This is therefore the smallest scheme that keeps claims falsifiable, not an adaptation of an existing one.
+When this scheme was written (vault checked 2026-11-11, commit 62e9777), the Second Brain vault held no existing claim map, no notes on Girard, Sack, or Black, and no formalization scheme. This is therefore the smallest scheme that keeps claims falsifiable, not an adaptation of an existing one.
 
 ## Fields (one record per claim)
 
