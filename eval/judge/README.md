@@ -66,6 +66,9 @@ A PASS requires every cell to pass and `issues` to be empty.
 | `gini.series` | D4 | Recorded `aggression_gini` differs from the official gini of `received_aggression` |
 | `script.stdout` | C-T2, script reference | The saved script stdout is missing, fails its SHA-256, or lacks a row |
 | `script.row` | C-T2, script reference | A printed row of the unmodified script differs from the judge's recomputation |
+| `v022.incomplete` | v0.2.2 incomplete trials | An incomplete trial (timed_out or steps_completed != n_steps_planned) after allowed rerun |
+| `v022.multiple_reruns` | v0.2.2 rerun limit | More than one labeled rerun for the same seed |
+| `v022.determinism` | v0.2.2 determinism check | Incomplete trial's per-step arrays do not match the completed rerun's prefix |
 
 ## Tests
 
