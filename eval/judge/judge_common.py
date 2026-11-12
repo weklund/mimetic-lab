@@ -321,6 +321,58 @@ def _nested_arrays_equal_exact(arr1, arr2):
     return True
 
 
+def check_id_integrity(series, trial_id, n_agents):
+    """Check per-step ID integrity: no duplicate alive_ids, eligible_ids must be subset of alive_ids.
+    
+    Returns (valid, issues_list) where issues use trial.metadata code.
+    Uses same checks as judge_table2: ids.alive_duplicate, ids.eligible_not_alive.
+    """
+    issues = []
+    
+    if not isinstance(series, dict):
+        return False, [{"code": "trial.metadata", "where": trial_id, "detail": "series is not a dict"}]
+    
+    alive_ids = series.get("alive_ids", [])
+    eligible_ids = series.get("eligible_ids", [])
+    n_alive = series.get("n_alive", [])
+    eligible_count = series.get("eligible_count", [])
+    
+    if not isinstance(alive_ids, list) or not isinstance(eligible_ids, list):
+        return True, []  # Skip check if arrays are not lists
+    
+    steps = min(len(alive_ids), len(eligible_ids), len(n_alive), len(eligible_count))
+    
+    for t in range(steps):
+        if t >= len(alive_ids) or t >= len(eligible_ids):
+            continue
+            
+        alive = alive_ids[t]
+        eligible = eligible_ids[t]
+        
+        if not isinstance(alive, list) or not isinstance(eligible, list):
+            continue
+        
+        # Check for duplicate alive_ids
+        if len(set(alive)) != len(alive):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"duplicate alive_ids at step {t}"
+            })
+            break  # Report first occurrence
+        
+        # Check eligible_ids are subset of alive_ids
+        if not set(eligible) <= set(alive):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"eligible_ids not all in alive_ids at step {t}"
+            })
+            break  # Report first occurrence
+    
+    return len(issues) == 0, issues
+
+
 def check_events_prefix(incomplete_trial, complete_trial, incomplete_steps):
     """Check that events in the incomplete prefix match between incomplete and complete trials.
     

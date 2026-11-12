@@ -227,7 +227,7 @@ def check_trial_metadata(tr, stem, expect_variant, expect_gamma, expect_n, trial
         if load_err:
             # Unreadable or missing NPZ is FAIL, not skipped
             issues.append(issue("trial.metadata", f"cannot load series: {load_err}", stem))
-        elif loaded_series:
+        elif loaded_series is not None:
             steps_completed = tr.get("steps_completed")
             if not _is_int(steps_completed):
                 issues.append(issue("trial.metadata", "steps_completed is not an integer", stem))
@@ -248,6 +248,11 @@ def check_trial_metadata(tr, stem, expect_variant, expect_gamma, expect_n, trial
                             issues.append(issue("trial.metadata", 
                                 f"series array {array_name!r} length {len(array)} != steps_completed {steps_completed}", 
                                 stem))
+                
+                # Check per-step ID integrity
+                from judge_common import check_id_integrity
+                valid_ids, id_issues = check_id_integrity(loaded_series, stem, expect_n)
+                issues.extend(id_issues)
     
     return issues
 

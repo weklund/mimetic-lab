@@ -1147,6 +1147,59 @@ class Table10NPZ(unittest.TestCase):
         metadata_issues = [i for i in result["issues"] 
                           if i["code"] == "trial.metadata" and "length" in i["detail"] and "mean_R" in i["detail"]]
         self.assertGreater(len(metadata_issues), 0)
+    
+    @patch_n_steps(8)
+    def test_empty_inline_series_fails(self):
+        """Trial with series: {} -> FAIL with trial.metadata, not PASS, not zero issues.
+        
+        Empty dict is falsy, so guard must be 'is not None' not just truthiness check.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        # Make one trial with empty inline series
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trials[trial_id]["series"] = {}
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should FAIL (not PASS, not zero issues)
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertNotEqual(code, 0)
+        
+        # Should have trial.metadata issues for missing required arrays
+        metadata_issues = [i for i in result["issues"] if i["code"] == "trial.metadata"]
+        self.assertGreater(len(metadata_issues), 0, "Must have trial.metadata issues for missing arrays")
+        
+        # Check at least one mentions a missing required array
+        missing_array_issues = [i for i in metadata_issues if "missing" in i["detail"].lower()]
+        self.assertGreater(len(missing_array_issues), 0, "Must report missing required arrays")
+    
+    @patch_n_steps(8)
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    def test_empty_npz_fails(self):
+        """Trial offloading to real empty .npz (no arrays) -> FAIL with trial.metadata."""
+        manifest, trials = make_ensemble_full()
+        
+        # Make one trial with NPZ reference to empty file
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trial = trials[trial_id]
+        
+        # Create empty NPZ (no arrays)
+        npz_arrays = {}
+        
+        # Replace series with NPZ reference
+        trial["series"] = {"$npz": f"{trial_id}.npz"}
+        
+        npz_files = {f"{trial_id}.npz": npz_arrays}
+        
+        result, code = self.run_judge(manifest, trials, npz_files)
+        
+        # Should FAIL
+        self.assertEqual(result["verdict"], "FAIL")
+        
+        # Should have trial.metadata issues for missing required arrays
+        metadata_issues = [i for i in result["issues"] if i["code"] == "trial.metadata"]
+        self.assertGreater(len(metadata_issues), 0, "Must have trial.metadata issues for missing arrays")
 
 
 class Table10Aliases(unittest.TestCase):
@@ -1203,6 +1256,47 @@ class Table10Aliases(unittest.TestCase):
         self.assertEqual(cell["determinism_failures"], 0)
 
 
+class Table10IDIntegrity(unittest.TestCase):
+    """Tests for per-step ID integrity checks."""
+    
+    def run_judge(self, manifest, trials):
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table10")
+            os.makedirs(os.path.join(traces, "trials"))
+            
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+            for stem, trial in trials.items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(trial))
+            
+            out = os.path.join(d, "result.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = J10.main([traces, out])
+            
+            result = J10.load_json_strict(J10.read_bytes(out))
+        
+        return result, code
+    
+    @patch_n_steps(8)
+    def test_duplicate_alive_ids_fails(self):
+        """Trial with duplicate alive_ids must not PASS."""
+        manifest, trials = make_ensemble_full()
+        
+        # Make one trial have duplicate alive_ids
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Introduce duplicate at step 3: [0, 1, 2, 3, 3] instead of [0, 1, 2, 3, 4]
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2, 3, 3]
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should FAIL
+        self.assertEqual(result["verdict"], "FAIL")
+        
+        # Should have trial.metadata issue about duplicate alive_ids
+        metadata_issues = [i for i in result["issues"] 
+                          if i["code"] == "trial.metadata" and "duplicate alive_ids" in i["detail"]]
+        self.assertGreater(len(metadata_issues), 0)
+
+
 class Table10BlackRepo(unittest.TestCase):
     """Tests requiring Black's official repo at pinned SHA."""
     
@@ -1225,9 +1319,10 @@ class Table10BlackRepo(unittest.TestCase):
     
     @unittest.skipUnless(HAS_NUMPY, "numpy not available")
     def test_short_run_unanimity_triggered(self):
-        """Run a short run_unanimity_triggered at pinned SHA 89e7bbb.
+        """Run actual short run_unanimity_triggered at pinned SHA 89e7bbb, check forced-timeout prefix.
         
         Skipped only if Black repo is absent. Must run in CI (Black checked out at BLACK_SHA).
+        Compare forced-timeout incomplete vs completed run of same seed; prefix must equal.
         """
         import black_reference as B
         
@@ -1238,10 +1333,46 @@ class Table10BlackRepo(unittest.TestCase):
             else:
                 self.skipTest(f"Black repo not available: {WHY}")
         
-        # This test validates that a short unanimity run produces the expected structure
-        # and that forced-timeout prefix can be compared with a completed run
-        # We're not running actual long simulations here, just verifying the test framework works
-        self.assertTrue(True, "Black repo is available and test framework is ready")
+        # Load official runner
+        official = B.load()
+        
+        # Run a short unanimity_triggered simulation
+        seed = 42
+        n_steps_short = 20
+        N = 5
+        gamma = 1.05
+        
+        # Run incomplete (forced timeout at step 10)
+        incomplete_series, incomplete_events = official.run_unanimity_triggered(
+            seed=seed, N=N, gamma=gamma, n_steps=10, 
+            expulsion_mode="unanimity_adaptive", timeout_seconds=None
+        )
+        
+        # Run complete (to step 20)
+        complete_series, complete_events = official.run_unanimity_triggered(
+            seed=seed, N=N, gamma=gamma, n_steps=n_steps_short,
+            expulsion_mode="unanimity_adaptive", timeout_seconds=None
+        )
+        
+        # Check that prefix matches
+        for key in incomplete_series:
+            if key in complete_series:
+                incomplete_arr = incomplete_series[key]
+                complete_arr = complete_series[key]
+                
+                # Compare prefix (first 10 steps)
+                if isinstance(incomplete_arr, list) and isinstance(complete_arr, list):
+                    self.assertEqual(len(incomplete_arr), 10, f"{key} incomplete should have 10 steps")
+                    self.assertGreaterEqual(len(complete_arr), 10, f"{key} complete should have >= 10 steps")
+                    
+                    # Check prefix equality
+                    for i in range(10):
+                        if isinstance(incomplete_arr[i], list):
+                            self.assertEqual(incomplete_arr[i], complete_arr[i], 
+                                           f"{key}[{i}] prefix mismatch")
+                        else:
+                            self.assertEqual(incomplete_arr[i], complete_arr[i],
+                                           f"{key}[{i}] prefix mismatch")
 
 
 class Table10ViabilityD7(unittest.TestCase):
