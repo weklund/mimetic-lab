@@ -285,10 +285,11 @@ Stated in Sack's words: the parts are mutual mediator sets, not minimum ones, an
 is no further hypothesis. `[Nonempty N]` is needed: for an empty node type the
 hypotheses hold vacuously and no such partition exists.
 
-Not yet proved. `unique_narcissist_of_weakly_connected` supplies the key step (a
-connected network in equilibrium has a self-desiring node); what remains is building the
-partition {weak component of some node, its complement}. -/
-proof_wanted existence_equilibrium_no_narcissism_only_if [Nonempty N]
+Proof plan: Pick any node n₀. Its weak component C is a mutual mediator set. The
+complement is also closed under med (if med x were in C, then x would be related to n₀).
+Since no node desires itself, the network cannot be weakly connected (by
+unique_narcissist_of_weakly_connected), so the complement is nonempty. -/
+theorem existence_equilibrium_no_narcissism_only_if [Nonempty N]
     (net : MimeticNetwork N)
     (h_equil : net.inEquilibrium)
     (h_no_self : ∀ n : N, net.obj n ≠ n) :
@@ -296,7 +297,99 @@ proof_wanted existence_equilibrium_no_narcissism_only_if [Nonempty N]
       2 ≤ partition.card ∧
       (∀ S ∈ partition, S.Nonempty ∧ isMutualMediatorSet net S) ∧
       (∀ S₁ ∈ partition, ∀ S₂ ∈ partition, S₁ ≠ S₂ → S₁ ∩ S₂ = ∅) ∧
-      (Finset.univ : Finset N) = partition.biUnion id
+      (Finset.univ : Finset N) = partition.biUnion id := by
+  classical
+  obtain ⟨n₀⟩ := ‹Nonempty N›
+  let C : Finset N := Finset.univ.filter (Relation.EqvGen net.medRel · n₀)
+  have hC_nonempty : C.Nonempty := by
+    use n₀
+    simp only [C, Finset.mem_filter, Finset.mem_univ, true_and]
+    exact Relation.EqvGen.refl n₀
+  have hC_mut : isMutualMediatorSet net C := by
+    intro x hx
+    simp only [C, Finset.mem_filter, Finset.mem_univ, true_and] at hx ⊢
+    apply Relation.EqvGen.trans _ _ _ _ hx
+    apply Relation.EqvGen.symm
+    exact Relation.EqvGen.rel _ _ (by rfl : net.medRel x (net.med x))
+  let C_comp : Finset N := Finset.univ \ C
+  have hC_comp_mut : isMutualMediatorSet net C_comp := by
+    intro x hx
+    simp only [C_comp, Finset.mem_sdiff, Finset.mem_univ, true_and, C,
+      Finset.mem_filter] at hx ⊢
+    intro hmed_C
+    apply hx
+    apply Relation.EqvGen.trans _ _ _ _ hmed_C
+    exact Relation.EqvGen.rel _ _ (by rfl : net.medRel x (net.med x))
+  have hC_comp_nonempty : C_comp.Nonempty := by
+    by_contra h_empty
+    simp only [Finset.not_nonempty_iff_eq_empty] at h_empty
+    have h_all_conn : ∀ a b : N, Relation.EqvGen net.medRel a b := by
+      intro a b
+      have ha : Relation.EqvGen net.medRel a n₀ := by
+        have : a ∉ C_comp := by
+          rw [h_empty]
+          exact Finset.notMem_empty a
+        simp only [C_comp, Finset.mem_sdiff, Finset.mem_univ, true_and,
+          not_not, C, Finset.mem_filter] at this
+        exact this
+      have hb : Relation.EqvGen net.medRel b n₀ := by
+        have : b ∉ C_comp := by
+          rw [h_empty]
+          exact Finset.notMem_empty b
+        simp only [C_comp, Finset.mem_sdiff, Finset.mem_univ, true_and,
+          not_not, C, Finset.mem_filter] at this
+        exact this
+      exact Relation.EqvGen.trans _ _ _ ha (Relation.EqvGen.symm _ _ hb)
+    obtain ⟨o, -, ho⟩ := unique_narcissist_of_weakly_connected net h_equil h_all_conn
+    have : net.obj o = o := (ho o).mpr rfl
+    exact h_no_self o this
+  use {C, C_comp}
+  constructor
+  · have hC_ne_comp : C ≠ C_comp := by
+      intro h_eq
+      have hn₀_C : n₀ ∈ C := by
+        simp only [C, Finset.mem_filter, Finset.mem_univ, true_and]
+        exact Relation.EqvGen.refl n₀
+      rw [h_eq] at hn₀_C
+      simp only [C_comp, Finset.mem_sdiff, Finset.mem_univ, true_and] at hn₀_C
+      have : n₀ ∈ C := by
+        simp only [C, Finset.mem_filter, Finset.mem_univ, true_and]
+        exact Relation.EqvGen.refl n₀
+      exact hn₀_C this
+    rw [Finset.card_pair hC_ne_comp]
+  constructor
+  · intro S hS
+    simp only [Finset.mem_insert, Finset.mem_singleton] at hS
+    cases hS with
+    | inl h => rw [h]; exact ⟨hC_nonempty, hC_mut⟩
+    | inr h => rw [h]; exact ⟨hC_comp_nonempty, hC_comp_mut⟩
+  constructor
+  · intro S₁ hS₁ S₂ hS₂ hne
+    simp only [Finset.mem_insert, Finset.mem_singleton] at hS₁ hS₂
+    cases hS₁ with
+    | inl h₁ =>
+      cases hS₂ with
+      | inl h₂ => rw [h₁, h₂] at hne; exact absurd rfl hne
+      | inr h₂ =>
+        rw [h₁, h₂]
+        simp only [C_comp]
+        exact Finset.inter_sdiff_self _ _
+    | inr h₁ =>
+      cases hS₂ with
+      | inl h₂ =>
+        rw [h₁, h₂]
+        rw [Finset.inter_comm]
+        simp only [C_comp]
+        exact Finset.inter_sdiff_self _ _
+      | inr h₂ => rw [h₁, h₂] at hne; exact absurd rfl hne
+  · ext x
+    simp only [Finset.mem_biUnion, id_eq, Finset.mem_insert, Finset.mem_singleton,
+      Finset.mem_univ, true_iff]
+    by_cases hx : x ∈ C
+    · exact ⟨C, Or.inl rfl, hx⟩
+    · refine ⟨C_comp, Or.inr rfl, ?_⟩
+      simp only [C_comp, Finset.mem_sdiff, Finset.mem_univ, true_and]
+      exact hx
 
 /-- **Sack's Theorem 3, "if".** If the nodes can be partitioned into at least two
 nonempty, disjoint sets closed under `med`, some object assignment is in equilibrium
