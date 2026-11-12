@@ -1,0 +1,41 @@
+name: Lean Build
+
+on:
+  pull_request:
+    paths:
+      - 'lean/**'
+      - '.github/workflows/lean-build.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lean/**'
+      - '.github/workflows/lean-build.yml'
+
+jobs:
+  build:
+    name: Build Lean Project
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+      
+      - name: Cache mathlib
+        uses: actions/cache@v4
+        with:
+          path: lean/.lake
+          key: ${{ runner.os }}-lean-${{ hashFiles('lean/lake-manifest.json') }}
+          restore-keys: |
+            ${{ runner.os }}-lean-
+      
+      - name: Build Lean project
+        working-directory: lean
+        run: |
+          lake update
+          lake build

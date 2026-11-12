@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Lean 4
+/.lake/
+/lake-packages/
+/build/
+*.olean
+*.ilean
+*.c
+*.so
