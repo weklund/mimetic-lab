@@ -28,8 +28,9 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install numpy
-        run: python -m pip install numpy
+      # networkx: the official Table 10 model imports it (black_reference.load_table10).
+      - name: Install numpy and networkx
+        run: python -m pip install numpy networkx
 
       # Black's code is read at the pinned SHA, never copied into this repo.
       # black_reference.py also checks the SHA-256 of the two files it reads.

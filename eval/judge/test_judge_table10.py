@@ -43,60 +43,112 @@ def write_text(path, text):
         fh.write(text)
 
 
+# The fixture's runs are 8 steps long, so D7's 500 silent steps cannot fit. Tests run the
+# judge with MIN_SILENCE patched to 3; the D7 rule itself is unchanged.
+FIXTURE_MIN_SILENCE = 3
+_saved_min_silence = None
+
+
+def setUpModule():
+    global _saved_min_silence
+    _saved_min_silence = J10.MIN_SILENCE
+    J10.MIN_SILENCE = FIXTURE_MIN_SILENCE
+
+
+def tearDownModule():
+    J10.MIN_SILENCE = _saved_min_silence
+
+
 def make_trial(variant, gamma, N, seed, n_steps_planned=8, steps_completed=None,
                timed_out=False, generative=True, timeout_seconds=600.0, host="test-host",
                rerun_of=None, expulsion_steps=None):
-    """Build a minimal C-T10 trial.
-    
+    """Build a minimal C-T10 trial whose viability follows from its own evidence.
+
     Defaults to short 8-step series for fast ensemble tests. Completeness means
     steps_completed == n_steps_planned and timed_out == false.
+
+    The trial is what official run_unanimity_triggered would record: a generative trial
+    has one expulsion, of agent 0 at step 0, where modal agreement is 1.0; agent 0 is
+    gone from the next step on; modal agreement then stays at 0.5, below the adaptive
+    threshold, so the run self-exhausts. A non-generative trial never reaches the
+    threshold and has no expulsions. viability is official classify_exhaustion on that
+    evidence (with FIXTURE_MIN_SILENCE), or status "timeout" for an incomplete trial.
     """
     if steps_completed is None:
         steps_completed = n_steps_planned
     if expulsion_steps is None:
-        expulsion_steps = [2, 4] if generative and steps_completed > 4 else []
-    
+        expulsion_steps = [0] if generative else []
+    expulsion_steps = [s for s in expulsion_steps if s < steps_completed]
+    victims = list(range(len(expulsion_steps)))
+    victim_at = dict(zip(expulsion_steps, victims))
+
     trial_id = f"table10-g{gamma:.2f}-N{N}-v{variant}-s{seed}"
-    
+
+    alive_rows, targets_rows, modal, modal_target = [], [], [], []
+    alive = list(range(N))
+    for t in range(steps_completed):
+        alive_rows.append(alive[:])
+        # Each living agent targets the next living agent: no self-targets.
+        targets_rows.append([alive[(i + 1) % len(alive)] for i in range(len(alive))])
+        modal.append(1.0 if t in victim_at else 0.5)
+        modal_target.append(victim_at.get(t, alive[0]))
+        if t in victim_at:
+            alive = [a for a in alive if a != victim_at[t]]
+
     # All required per-step series per eval/trial-schema.md and DETERMINISM_ARRAYS
-    # top_targets: avoid self-targets (agent i targets agent (i+1) % N)
-    targets = [(i + 1) % N for i in range(N)]
     series = {
         "t": list(range(steps_completed)),
-        "n_alive": [N] * steps_completed,
-        "alive_ids": [list(range(N))] * steps_completed,
+        "n_alive": [len(r) for r in alive_rows],
+        "alive_ids": alive_rows,
         "system_tension": [1.0 + 0.01 * i for i in range(steps_completed)],
-        "modal_agreement": [0.8] * steps_completed,
-        "eligible_count": [N] * steps_completed,
-        "eligible_ids": [list(range(N))] * steps_completed,
-        "top_targets": [targets[:] for _ in range(steps_completed)],
-        "received_aggression": [[0.1] * N] * steps_completed,
+        "modal_agreement": modal,
+        "eligible_count": [len(r) for r in alive_rows],
+        "eligible_ids": [r[:] for r in alive_rows],
+        "top_targets": targets_rows,
+        "received_aggression": [[0.1] * len(r) for r in alive_rows],
         "aggression_gini": [0.1] * steps_completed,
         "top_target_share": [0.15] * steps_completed,
         "convergence_ratio": [0.9] * steps_completed,
         "aggression_entropy": [2.5] * steps_completed,
         "top_R": [0.05] * steps_completed,
         "mean_R": [0.03] * steps_completed,
+        "modal_target_id": modal_target,
     }
-    
+
+    n_exp = len(expulsion_steps)
+    n_alive_final = N - n_exp
+    pct_consumed = (N - n_alive_final) / N
+    complete = (not timed_out) and steps_completed == n_steps_planned
+    if complete:
+        status = JC.classify_exhaustion_status(modal, expulsion_steps, steps_completed,
+                                               n_alive_final, FIXTURE_MIN_SILENCE)
+    else:
+        status = "timeout"
+    is_generative = (complete and status == "genuine_exhaustion" and pct_consumed < 0.50
+                     and n_exp >= 1)
+
     viability = {
         "min_silence": 500,
         "predicate": "D7",
-        "n_expulsions": 2 if generative else 0,
-        "pct_consumed": 0.3 if generative else 0.6,
-        "n_alive": N - 2 if generative else N,
-        "status": "genuine_exhaustion" if generative else "still_cycling",
-        "self_exhausted": generative,
-        "generative": generative,
+        "n_expulsions": n_exp,
+        "pct_consumed": pct_consumed,
+        "n_alive": n_alive_final,
+        "status": status,
+        "self_exhausted": True if status == "genuine_exhaustion" else (False if status == "still_cycling" else None),
+        "generative": is_generative,
         "first_peace": None,
         "first_reconverge": None,
-        "peak_modal": 0.95,
+        "peak_modal": max(modal) if modal else 0.0,
         "n_fragments": 1,
-        "largest_fragment": N,
+        "largest_fragment": n_alive_final,
         "expulsion_steps": expulsion_steps,
-        "med_gap": 500 if generative else None,
+        "med_gap": None,
     }
-    
+    expulsion_events = [{"step": s, "victim_id": v, "received_aggression": 0.1}
+                        for s, v in zip(expulsion_steps, victims)]
+    catharsis_events = [{"step": s, "victim_id": v, "M_pre": 1.0, "M_post": 0.9, "fractional_drop": 0.1}
+                        for s, v in zip(expulsion_steps, victims)]
+
     return {
         "contract_version": "0.2.2",
         "trial_id": trial_id,
@@ -132,8 +184,8 @@ def make_trial(variant, gamma, N, seed, n_steps_planned=8, steps_completed=None,
         "started_at": "2026-11-12T10:00:00-05:00",
         "ended_at": "2026-11-12T10:10:00-05:00",
         "series": series,
-        "expulsion_events": [],
-        "catharsis_events": [],
+        "expulsion_events": expulsion_events,
+        "catharsis_events": catharsis_events,
         "viability": viability,
         "viability_D7_paper": None,
     }
@@ -308,10 +360,8 @@ class Table10Basic(unittest.TestCase):
         
         # Change one trial in AC/1.05/N5 to make 6 viable instead of 5
         trial_id = "table10-g1.05-N5-vAC-s5042"
-        trials[trial_id]["viability"]["generative"] = True
-        trials[trial_id]["viability"]["n_expulsions"] = 2
-        trials[trial_id]["viability"]["pct_consumed"] = 0.3
-        trials[trial_id]["viability"]["status"] = "genuine_exhaustion"
+        self.assertFalse(trials[trial_id]["viability"]["generative"])
+        trials[trial_id] = make_trial("AC", 1.05, 5, 5042, generative=True)
         
         result, code = self.run_judge(manifest, trials)
         
@@ -673,7 +723,8 @@ class Table10Reruns(unittest.TestCase):
         rerun["trial_id"] = rerun_id
         rerun["rerun_of"] = incomplete_id
         # Introduce a mismatch in modal_agreement at step 2
-        rerun["series"]["modal_agreement"][2] = 0.9  # Different from 0.8
+        # Stays below the adaptive threshold, so D7 evidence is unchanged; only the prefix differs.
+        rerun["series"]["modal_agreement"][2] = 0.6  # Different from 0.5
         trials[rerun_id] = rerun
         manifest["trial_ids"].append(rerun_id)
         
@@ -1219,28 +1270,11 @@ class Table10NPZ(unittest.TestCase):
         trial_id = "table10-g1.05-N5-vAC-s42"
         trial = trials[trial_id]
         
-        # Build ragged series: 5 alive at step 0, 4 alive after step 3 (death at step 3)
-        # Steps 0-2: all 5 alive
-        # Step 3: agent 4 dies
-        # Steps 4-7: 4 alive (0,1,2,3)
+        # The fixture's generative trial is already ragged and evidence-consistent:
+        # agent 0 is expelled at step 0, so 5 alive at step 0 and 4 from step 1 on.
         series = trial["series"]
-        for t in range(8):
-            if t < 3:
-                series["alive_ids"][t] = [0, 1, 2, 3, 4]
-                series["n_alive"][t] = 5
-                series["eligible_ids"][t] = [0, 1, 2, 3, 4]
-                series["eligible_count"][t] = 5
-                # No self-targets: agent i -> (i+1) % 5
-                series["top_targets"][t] = [1, 2, 3, 4, 0]
-            else:
-                # Agent 4 died
-                series["alive_ids"][t] = [0, 1, 2, 3]
-                series["n_alive"][t] = 4
-                series["eligible_ids"][t] = [0, 1, 2, 3]
-                series["eligible_count"][t] = 4
-                # No self-targets: agent i -> (i+1) % 4
-                series["top_targets"][t] = [1, 2, 3, 0]
-        
+        self.assertEqual([len(r) for r in series["alive_ids"]], [5, 4, 4, 4, 4, 4, 4, 4])
+
         # Create NPZ with official export_v02.py layout: object array of 1-d np.int64 arrays
         npz_arrays = {}
         for key, val in series.items():
@@ -1333,18 +1367,12 @@ class Table10NPZ(unittest.TestCase):
         """
         manifest, trials = make_ensemble_full()
         
-        trial_id = "table10-g1.05-N5-vAC-s42"
+        # A non-generative fixture trial: no expulsions, so every row has length 5.
+        trial_id = "table10-g1.05-N5-vAC-s19042"
         trial = trials[trial_id]
-        
-        # All 8 steps: 5 alive, no self-targets
         series = trial["series"]
-        for t in range(8):
-            series["alive_ids"][t] = [0, 1, 2, 3, 4]
-            series["n_alive"][t] = 5
-            series["eligible_ids"][t] = [0, 1, 2, 3, 4]
-            series["eligible_count"][t] = 5
-            series["top_targets"][t] = [1, 2, 3, 4, 0]  # No self-targets
-        
+        self.assertEqual({len(r) for r in series["alive_ids"]}, {5})
+
         # Create NPZ with official export_v02.py layout
         npz_arrays = {}
         for key, val in series.items():
@@ -1453,8 +1481,9 @@ class Table10IDIntegrity(unittest.TestCase):
         
         # Make one trial have duplicate alive_ids
         trial_id = "table10-g1.05-N5-vAC-s42"
-        # Introduce duplicate at step 3: [0, 1, 2, 3, 3] instead of [0, 1, 2, 3, 4]
-        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2, 3, 3]
+        # Introduce a duplicate at step 3, keeping the row length (agent 0 was expelled at step 0)
+        row = trials[trial_id]["series"]["alive_ids"][3]
+        trials[trial_id]["series"]["alive_ids"][3] = row[:-1] + [row[0]]
         
         result, code = self.run_judge(manifest, trials)
         
@@ -1696,25 +1725,97 @@ class Table10BlackRepo(unittest.TestCase):
         
         return result, code
     
-    @unittest.skip("TODO: Official C-T10 runner test for issue #19 - needs real interrupt-at-k vs complete, not 10-vs-20")
-    def test_short_run_unanimity_triggered(self):
-        """TODO: Run C-T10 runner with real forced timeout (interrupt at step k < n_steps_planned).
-        
-        Issue #19 requires: a run PLANNED for N steps and INTERRUPTED at k (timed_out=true,
-        steps_completed=k < n_steps_planned), compared with SAME seed run to COMPLETION
-        (timed_out=false, steps_completed=n_steps_planned=N). The interrupted run's arrays
-        must equal the first k steps of the completed run.
-        
-        Current black_reference.py only loads Table 2 helpers (time_to_95, gini, entropy).
-        To implement this correctly needs:
-        - Extend black_reference to load small_n_utils.run_unanimity_triggered under same
-          SHA-256 pin and AST-only rule (hash source file, parse with ast, compile only
-          what's needed, never run scripts)
-        - Use timeout_seconds to actually interrupt: timed_out must be true, k < N
-        - Compare prefixes
-        - Skip only if Black absent; REQUIRE_OFFICIAL=1 must fail if Black missing
+    def official(self):
+        """The pinned Table 10 functions, or skip (fail under REQUIRE_OFFICIAL=1)."""
+        import black_reference as B
+        ok, why = B.available()
+        if ok:
+            try:
+                return B.load_table10()
+            except RuntimeError as exc:
+                ok, why = False, str(exc)
+        if os.environ.get("REQUIRE_OFFICIAL") == "1":
+            self.fail(f"official Table 10 code required: {why}")
+        self.skipTest(f"Black repo not available: {why}")
+
+    def test_forced_timeout_prefix_equals_completed_run(self):
+        """Issue #19: a run planned for N steps and interrupted at k equals the first k steps
+        of the same seed run to completion, and the judge's prefix check agrees.
+
+        The interruption is the official wall-clock net itself: time.monotonic is patched so
+        the clock jumps past timeout_seconds after K_CUT step checks. Planned steps, seed and
+        every other argument are identical in both runs.
         """
-        pass
+        import itertools
+        import time
+        from unittest import mock
+
+        R = self.official()
+        args = dict(n_agents=8, gamma=1.3, variant="AC", n_steps=400, seed=42, cooldown=5,
+                    record_history=True)
+        full = R.run_unanimity_triggered(**args, timeout_seconds=1e9)
+
+        K_CUT = 250
+        calls = itertools.count()
+
+        def clock():  # call 0 is wall_start; call k+1 is the check before step k
+            return 0.0 if next(calls) <= K_CUT else 1e12
+
+        with mock.patch.object(time, "monotonic", clock):
+            cut = R.run_unanimity_triggered(**args, timeout_seconds=1.0)
+
+        self.assertFalse(full["timed_out"])
+        self.assertEqual(full["steps_completed"], 400)
+        self.assertTrue(cut["timed_out"])
+        self.assertEqual(cut["status"], "timeout")
+        self.assertEqual(cut["steps_completed"], K_CUT)
+        # Not vacuous: expulsions happen inside the shared prefix.
+        self.assertGreaterEqual(len([s for s in full["expulsion_steps"] if s < K_CUT]), 2)
+
+        self.assertEqual(cut["modal_series"], full["modal_series"][:K_CUT])
+        self.assertEqual(cut["alive_counts"], full["alive_counts"][:K_CUT])
+        self.assertEqual(cut["expulsion_steps"], [s for s in full["expulsion_steps"] if s < K_CUT])
+
+        # The judge's own prefix check, on the official runner's arrays.
+        def as_trial(res):
+            return {"steps_completed": res["steps_completed"],
+                    "series": {"modal_agreement": res["modal_series"], "n_alive": res["alive_counts"]}}
+        matches, mismatches = JC.check_determinism_prefix(
+            as_trial(cut), as_trial(full), ["modal_agreement", "n_alive"], trial_dir=None)
+        self.assertTrue(matches, mismatches)
+
+        # A one-step perturbation of the completed run is caught.
+        bad = as_trial(full)
+        bad["series"]["modal_agreement"] = list(bad["series"]["modal_agreement"])
+        bad["series"]["modal_agreement"][K_CUT // 2] += 1e-12
+        matches, _ = JC.check_determinism_prefix(as_trial(cut), bad, ["modal_agreement"], trial_dir=None)
+        self.assertFalse(matches)
+
+        # The judge's D7 status on the completed run equals the official classification.
+        self.assertEqual(JC.classify_exhaustion_status(full["modal_series"], full["expulsion_steps"],
+                                                       400, full["n_alive"], 500), full["status"])
+
+    def test_d7_copies_match_official(self):
+        """judge_common's adaptive_unanimity_threshold and classify_exhaustion equal the pinned
+        official functions, on every living count and on random series around the threshold."""
+        import random
+        R = self.official()
+        for n in range(60):
+            self.assertEqual(JC.adaptive_unanimity_threshold(n), R.adaptive_unanimity_threshold(n), n)
+        rng = random.Random(19)
+        statuses = set()
+        for _ in range(3000):
+            n_steps = rng.randint(1, 40)
+            n_alive = rng.randint(1, 12)
+            thr = R.adaptive_unanimity_threshold(n_alive)
+            modal = [rng.choice([thr, thr - 1e-9, rng.random()]) for _ in range(n_steps)]
+            exp = sorted(rng.sample(range(n_steps), rng.randint(0, min(3, n_steps))))
+            min_silence = rng.randint(0, 20)
+            official, _ = R.classify_exhaustion(modal, exp, n_steps, n_alive, min_silence=min_silence)
+            ours = JC.classify_exhaustion_status(modal, exp, n_steps, n_alive, min_silence)
+            self.assertEqual(ours, official, (modal, exp, n_steps, n_alive, min_silence))
+            statuses.add(official)
+        self.assertEqual(statuses, {"no_expulsions", "still_cycling", "genuine_exhaustion", "censored"})
 
 
 class Table10ViabilityD7(unittest.TestCase):
@@ -1781,6 +1882,215 @@ class Table10ViabilityD7(unittest.TestCase):
         self.assertFalse(valid)
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["code"], "viability.d7")
+
+
+
+def run_judge_on(manifest, trials, npz=None):
+    """Write an ensemble to a temp dir, run the judge, return (result, exit code).
+
+    npz maps a file name in trials/ to a function that writes it given its path."""
+    with tempfile.TemporaryDirectory() as d:
+        traces = os.path.join(d, "table10")
+        tdir = os.path.join(traces, "trials")
+        os.makedirs(tdir)
+        write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+        for stem, trial in trials.items():
+            write_text(os.path.join(tdir, stem + ".json"), json.dumps(trial))
+        for name, writer in (npz or {}).items():
+            writer(os.path.join(tdir, name))
+        out = os.path.join(d, "result.json")
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = J10.main([traces, out])
+        return J10.load_json_strict(J10.read_bytes(out)), code
+
+
+GEN_ID = "table10-g1.05-N5-vAC-s42"      # generative: agent 0 expelled at step 0
+NONGEN_ID = "table10-g1.05-N5-vAC-s19042"  # not generative: no expulsions
+
+
+class Table10ViabilityEvidence(unittest.TestCase):
+    """D7 is recomputed from the trial's series and events, never taken from its labels."""
+
+    def assert_evidence_fail(self, trials, manifest, needle):
+        result, code = run_judge_on(manifest, trials)
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertEqual(code, 1)
+        details = [i["detail"] for i in result["issues"] if i["code"] == "viability.evidence"]
+        self.assertTrue(any(needle in d for d in details), details)
+
+    @patch_n_steps(8)
+    def test_fixture_is_evidence_consistent(self):
+        manifest, trials = make_ensemble_full()
+        self.assertTrue(trials[GEN_ID]["viability"]["generative"])
+        self.assertFalse(trials[NONGEN_ID]["viability"]["generative"])
+        result, code = run_judge_on(manifest, trials)
+        self.assertEqual(result["verdict"], "PASS", result["issues"][:3])
+        self.assertEqual(code, 0)
+
+    @patch_n_steps(8)
+    def test_label_without_expulsion_events_fails(self):
+        """Review probe: generative labels with no expulsion in the evidence."""
+        manifest, trials = make_ensemble_full()
+        trials[GEN_ID]["expulsion_events"] = []
+        self.assert_evidence_fail(trials, manifest, "viability.expulsion_steps differs")
+
+    @patch_n_steps(8)
+    def test_reconvergence_after_last_expulsion_is_still_cycling(self):
+        """Review probe: modal agreement returns to the threshold after the last expulsion
+        (inside the cooldown, so no new expulsion), but the trial says genuine_exhaustion."""
+        manifest, trials = make_ensemble_full()
+        trials[GEN_ID]["series"]["modal_agreement"][5] = 1.0
+        self.assert_evidence_fail(trials, manifest, "official classify_exhaustion gives 'still_cycling'")
+
+    @patch_n_steps(8)
+    def test_pct_consumed_must_follow_from_events(self):
+        manifest, trials = make_ensemble_full()
+        trials[GEN_ID]["viability"]["pct_consumed"] = 0.3
+        self.assert_evidence_fail(trials, manifest, "viability.pct_consumed=0.3")
+
+    @patch_n_steps(8)
+    def test_n_expulsions_must_follow_from_events(self):
+        manifest, trials = make_ensemble_full()
+        trials[GEN_ID]["viability"]["n_expulsions"] = 2
+        self.assert_evidence_fail(trials, manifest, "viability.n_expulsions=2")
+
+    @patch_n_steps(8)
+    def test_victim_must_leave_alive_ids(self):
+        manifest, trials = make_ensemble_full()
+        ser = trials[GEN_ID]["series"]
+        for t in range(1, 8):  # victim 0 never removed: a consistent but wrong living set
+            ser["alive_ids"][t] = list(range(5))
+            ser["eligible_ids"][t] = list(range(5))
+            ser["top_targets"][t] = [1, 2, 3, 4, 0]
+            ser["received_aggression"][t] = [0.1] * 5
+            ser["n_alive"][t] = 5
+            ser["eligible_count"][t] = 5
+        self.assert_evidence_fail(trials, manifest, "population minus earlier victims")
+
+    @patch_n_steps(8)
+    def test_expulsion_without_trigger_fails(self):
+        """An expulsion at a step where official Use 2 would not fire."""
+        manifest, trials = make_ensemble_full()
+        trials[GEN_ID]["series"]["modal_agreement"][0] = 0.5
+        self.assert_evidence_fail(trials, manifest, "differs from the official trigger at step 0")
+
+    @patch_n_steps(8)
+    def test_trigger_without_expulsion_fails(self):
+        """Official Use 2 would expel at step 3, but the trace records no expulsion."""
+        manifest, trials = make_ensemble_full()
+        trials[NONGEN_ID]["series"]["modal_agreement"][3] = 1.0
+        self.assert_evidence_fail(trials, manifest, "differs from the official trigger at step 3")
+
+    @patch_n_steps(8)
+    def test_victim_must_be_modal_target(self):
+        manifest, trials = make_ensemble_full()
+        trials[GEN_ID]["series"]["modal_target_id"][0] = 3
+        self.assert_evidence_fail(trials, manifest, "is not the modal target")
+
+    @patch_n_steps(8)
+    def test_relabeling_a_trial_cannot_change_the_count(self):
+        """Labels alone (status, generative, counts) on a no-expulsion trial: FAIL, and the
+        cell's viable count is unchanged."""
+        manifest, trials = make_ensemble_full()
+        v = trials[NONGEN_ID]["viability"]
+        v.update(status="genuine_exhaustion", generative=True, n_expulsions=1, pct_consumed=0.2,
+                 n_alive=4, expulsion_steps=[0])
+        result, _ = run_judge_on(manifest, trials)
+        self.assertEqual(result["verdict"], "FAIL")
+        cell = next(c for c in result["cells"] if (c["variant"], c["gamma"], c["N"]) == ("AC", 1.05, 5))
+        self.assertEqual(cell["n_viable"], 5)
+
+
+def write_exporter_npz(path, series):
+    """The layout eval/wrappers/export_v02.py writes: nested series as object arrays of
+    1-d int64/float64 rows (ragged after an expulsion); modal_target_id as int64."""
+    nested = ("alive_ids", "eligible_ids", "top_targets", "received_aggression")
+    ints = ("t", "n_alive", "eligible_count", "modal_target_id")
+    arrays = {}
+    for key, val in series.items():
+        if key in nested:
+            dt = np.float64 if key == "received_aggression" else np.int64
+            obj = np.empty(len(val), dtype=object)
+            for i, row in enumerate(val):
+                obj[i] = np.asarray(row, dtype=dt).reshape(-1)
+            arrays[key] = obj
+        else:
+            arrays[key] = np.asarray(val, dtype=np.int64 if key in ints else np.float64)
+    np.savez_compressed(path, **arrays)
+
+
+@unittest.skipUnless(HAS_NUMPY, "numpy required")
+class Table10NPZExporterLayout(unittest.TestCase):
+
+    @patch_n_steps(8)
+    def test_valid_ragged_npz_trial_passes(self):
+        """Lab blocker on acb9897: a valid complete trial offloaded in the exporter's
+        layout (object arrays of 1-d int64 rows, ragged after the step 0 expulsion) PASSes."""
+        manifest, trials = make_ensemble_full()
+        series = trials[GEN_ID]["series"]
+        self.assertNotEqual(len(series["alive_ids"][0]), len(series["alive_ids"][1]))  # ragged
+        trials[GEN_ID]["series"] = {"$npz": GEN_ID + ".npz"}
+        result, code = run_judge_on(manifest, trials,
+                                    npz={GEN_ID + ".npz": lambda p: write_exporter_npz(p, series)})
+        self.assertEqual(result["verdict"], "PASS", result["issues"][:3])
+        self.assertEqual(code, 0)
+
+    def test_npz_rows_load_as_python_ints(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_exporter_npz(os.path.join(d, "x.npz"),
+                               {"alive_ids": [[0, 1, 2], [1, 2]], "modal_agreement": [0.5, 0.25]})
+            series = JC.read_npz_series(os.path.join(d, "x.npz"))
+        self.assertEqual(series, {"alive_ids": [[0, 1, 2], [1, 2]], "modal_agreement": [0.5, 0.25]})
+        self.assertTrue(all(type(x) is int for row in series["alive_ids"] for x in row))
+
+    @patch_n_steps(8)
+    def test_npz_pickle_cannot_run_code(self):
+        """An object array whose pickle names any other callable is refused before it runs."""
+        with tempfile.TemporaryDirectory() as d:
+            marker = os.path.join(d, "ran")
+
+            class Payload:
+                def __reduce__(self):
+                    return (os.mkdir, (marker,))
+
+            manifest, trials = make_ensemble_full()
+            trials[GEN_ID]["series"] = {"$npz": GEN_ID + ".npz"}
+
+            def write(path):
+                obj = np.empty(1, dtype=object)
+                obj[0] = Payload()
+                np.savez(path, alive_ids=obj)
+
+            result, _ = run_judge_on(manifest, trials, npz={GEN_ID + ".npz": write})
+            self.assertFalse(os.path.exists(marker))
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertTrue(any("not allowed" in i["detail"] for i in result["issues"]), result["issues"][:3])
+
+
+class Table10EventsPrefix(unittest.TestCase):
+
+    def test_incomplete_event_after_steps_completed_is_a_mismatch(self):
+        inc = make_trial("AC", 1.05, 5, 42, steps_completed=4, timed_out=True)
+        comp = make_trial("AC", 1.05, 5, 42)
+        self.assertEqual(JC.check_events_prefix(inc, comp, 4), (True, []))
+        inc["expulsion_events"].append({"step": 6, "victim_id": 1, "received_aggression": 0.1})
+        ok, mismatches = JC.check_events_prefix(inc, comp, 4)
+        self.assertFalse(ok)
+        self.assertIn("expulsion_events", mismatches)
+
+    def test_malformed_events_are_mismatches_not_crashes(self):
+        comp = make_trial("AC", 1.05, 5, 42)
+        for bad in (["not an event"], [{"step": "0"}], "nope"):
+            inc = make_trial("AC", 1.05, 5, 42, steps_completed=4, timed_out=True)
+            inc["catharsis_events"] = bad
+            ok, mismatches = JC.check_events_prefix(inc, comp, 4)
+            self.assertFalse(ok)
+            self.assertIn("catharsis_events", mismatches)
+        inc = make_trial("AC", 1.05, 5, 42, steps_completed=4, timed_out=True)
+        inc["viability"]["expulsion_steps"] = ["0"]
+        ok, mismatches = JC.check_events_prefix(inc, comp, 4)
+        self.assertFalse(ok)
+        self.assertIn("viability.expulsion_steps", mismatches)
 
 
 if __name__ == "__main__":

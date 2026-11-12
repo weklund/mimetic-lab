@@ -2,11 +2,15 @@
 
 Shared functions for handling incomplete trials, reruns, and determinism checks.
 """
+import itertools
 import math
 import os
+import pickle
+import zipfile
 
 try:
     import numpy as np
+    from numpy.lib import format as npformat
     HAS_NUMPY = True
 except ImportError:
     HAS_NUMPY = False
@@ -142,40 +146,96 @@ def load_series(trial, trial_dir):
     if "$npz" in series_field:
         if not HAS_NUMPY:
             return None, "series uses NPZ but numpy is not available"
-        
+
         npz_name = series_field["$npz"]
         if not isinstance(npz_name, str):
             return None, f"$npz value is not a string: {npz_name!r}"
-        
+
         # Restrict to bare filename in trials/ (no path traversal)
         if "/" in npz_name or "\\" in npz_name or npz_name.startswith("."):
             return None, f"$npz must be a bare filename, not a path: {npz_name!r}"
-        
+
         npz_path = os.path.join(trial_dir, npz_name)
         if not os.path.isfile(npz_path):
             return None, f"NPZ file not found: {npz_name}"
-        
+
         try:
-            # Object arrays require allow_pickle, but path is restricted to trial_dir
-            npz_data = np.load(npz_path, allow_pickle=True)
-            series = {}
-            for key in npz_data.files:
-                arr = npz_data[key]
-                # Convert numpy arrays to lists
-                if arr.dtype == object:
-                    # Object array of 1-d arrays (for nested series like alive_ids)
-                    # Use .tolist() to convert numpy.int64 to Python int
-                    series[key] = [x.tolist() if hasattr(x, 'tolist') else x for x in arr]
-                else:
-                    # Regular numeric array
-                    series[key] = arr.tolist()
-            npz_data.close()
-            return series, None
+            return read_npz_series(npz_path), None
         except Exception as exc:
             return None, f"Failed to load NPZ {npz_name}: {exc}"
     else:
         # Inline series
         return series_field, None
+
+
+# Pickled classes an exporter NPZ may reference. The schema's nested series are object
+# arrays of 1-d numeric arrays, which numpy can only store by pickling. Unpickling an
+# arbitrary file can run arbitrary code, so object arrays are read with an unpickler
+# that refuses every class except the ones needed to rebuild plain numeric ndarrays.
+_NPZ_PICKLE_ALLOWED = {
+    ("numpy._core.multiarray", "_reconstruct"),
+    ("numpy.core.multiarray", "_reconstruct"),
+    ("numpy._core.multiarray", "scalar"),
+    ("numpy.core.multiarray", "scalar"),
+    ("numpy", "ndarray"),
+    ("numpy", "dtype"),
+}
+
+
+class _NumpyOnlyUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        if (module, name) not in _NPZ_PICKLE_ALLOWED:
+            raise pickle.UnpicklingError(f"NPZ pickle references {module}.{name}, which is not allowed")
+        return super().find_class(module, name)
+
+
+def _read_npy_member(fp):
+    """Read one .npy member. Object arrays go through _NumpyOnlyUnpickler."""
+    version = npformat.read_magic(fp)
+    if version == (1, 0):
+        shape, fortran, dtype = npformat.read_array_header_1_0(fp)
+    elif version in ((2, 0), (3, 0)):
+        shape, fortran, dtype = npformat.read_array_header_2_0(fp)
+    else:
+        raise ValueError(f"unsupported .npy version {version}")
+    if dtype.hasobject:
+        arr = _NumpyOnlyUnpickler(fp).load()
+        if not isinstance(arr, np.ndarray) or arr.shape != tuple(shape):
+            raise ValueError("object array does not match its header")
+        return arr
+    count = int(np.prod(shape)) if shape else 1
+    data = fp.read(count * dtype.itemsize)
+    if len(data) != count * dtype.itemsize:
+        raise ValueError("truncated array data")
+    arr = np.frombuffer(data, dtype=dtype, count=count)
+    return arr.reshape(shape, order="F" if fortran else "C")
+
+
+def _to_python(value):
+    """Plain Python numbers and lists, so _is_int and JSON-style equality behave as for inline series."""
+    if isinstance(value, np.ndarray):
+        if value.dtype.hasobject:
+            return [_to_python(x) for x in value]
+        if value.dtype.kind not in "iuf":
+            raise ValueError(f"unsupported array dtype {value.dtype}")
+        return value.tolist()
+    if value is None or (isinstance(value, (int, float)) and not isinstance(value, bool)):
+        return value
+    if isinstance(value, np.generic) and value.dtype.kind in "iuf":
+        return value.item()
+    raise ValueError(f"unsupported value of type {type(value).__name__} in NPZ")
+
+
+def read_npz_series(npz_path):
+    """Read every array in an exporter NPZ as Python lists, without unrestricted unpickling."""
+    series = {}
+    with zipfile.ZipFile(npz_path) as zf:
+        for member in zf.namelist():
+            if not member.endswith(".npy"):
+                raise ValueError(f"unexpected NPZ member {member!r}")
+            with zf.open(member) as fp:
+                series[member[:-4]] = _to_python(_read_npy_member(fp))
+    return series
 
 
 # Contract aliases: allow prefix match when one side uses the alias
@@ -538,50 +598,183 @@ def check_id_integrity(series, trial_id, n_agents):
     return len(issues) == 0, issues
 
 
+def _event_list_error(events, name, limit=None):
+    """Return an error string if events is not a list of {step: int, ...} objects, else None."""
+    if not isinstance(events, list):
+        return f"{name} is not a list"
+    for k, e in enumerate(events):
+        if not isinstance(e, dict) or not _is_int(e.get("step")):
+            return f"{name}[{k}] is not an object with an integer step"
+        if limit is not None and not 0 <= e["step"] < limit:
+            return f"{name}[{k}] has step {e['step']} outside 0..{limit - 1}"
+    return None
+
+
 def check_events_prefix(incomplete_trial, complete_trial, incomplete_steps):
     """Check that events in the incomplete prefix match between incomplete and complete trials.
-    
+
     Events whose step < steps_completed must match exactly. Checks expulsion_events,
-    catharsis_events, and viability.expulsion_steps.
-    
+    catharsis_events, and viability.expulsion_steps. An incomplete trial cannot have an
+    event at or after its own steps_completed, so such an event is a mismatch, as is any
+    malformed event list.
+
     Returns:
-        (matches, mismatches) where mismatches lists event types that don't match
+        (matches, mismatches) where mismatches lists the event types that don't match
     """
     mismatches = []
-    
-    # Check expulsion_events
-    inc_expulsions = incomplete_trial.get("expulsion_events", [])
-    comp_expulsions = complete_trial.get("expulsion_events", [])
-    
-    inc_prefix_expulsions = [e for e in inc_expulsions if e.get("step", -1) < incomplete_steps]
-    comp_prefix_expulsions = [e for e in comp_expulsions if e.get("step", -1) < incomplete_steps]
-    
-    if inc_prefix_expulsions != comp_prefix_expulsions:
-        mismatches.append("expulsion_events")
-    
-    # Check catharsis_events
-    inc_catharsis = incomplete_trial.get("catharsis_events", [])
-    comp_catharsis = complete_trial.get("catharsis_events", [])
-    
-    inc_prefix_catharsis = [e for e in inc_catharsis if e.get("step", -1) < incomplete_steps]
-    comp_prefix_catharsis = [e for e in comp_catharsis if e.get("step", -1) < incomplete_steps]
-    
-    if inc_prefix_catharsis != comp_prefix_catharsis:
-        mismatches.append("catharsis_events")
-    
-    # Check viability.expulsion_steps
-    inc_viab = incomplete_trial.get("viability", {})
-    comp_viab = complete_trial.get("viability", {})
-    
+    if not _is_int(incomplete_steps):
+        return False, ["steps_completed"]
+
+    for name in ("expulsion_events", "catharsis_events"):
+        inc = incomplete_trial.get(name, [])
+        comp = complete_trial.get(name, [])
+        if (_event_list_error(inc, name, limit=incomplete_steps) is not None
+                or _event_list_error(comp, name) is not None):
+            mismatches.append(name)
+            continue
+        if inc != [e for e in comp if e["step"] < incomplete_steps]:
+            mismatches.append(name)
+
+    inc_viab = incomplete_trial.get("viability")
+    comp_viab = complete_trial.get("viability")
     if isinstance(inc_viab, dict) and isinstance(comp_viab, dict):
-        inc_exp_steps = inc_viab.get("expulsion_steps", [])
-        comp_exp_steps = comp_viab.get("expulsion_steps", [])
-        
-        if isinstance(inc_exp_steps, list) and isinstance(comp_exp_steps, list):
-            inc_prefix_steps = [s for s in inc_exp_steps if s < incomplete_steps]
-            comp_prefix_steps = [s for s in comp_exp_steps if s < incomplete_steps]
-            
-            if inc_prefix_steps != comp_prefix_steps:
-                mismatches.append("viability.expulsion_steps")
-    
+        inc_steps = inc_viab.get("expulsion_steps", [])
+        comp_steps = comp_viab.get("expulsion_steps", [])
+        if (not isinstance(inc_steps, list) or not isinstance(comp_steps, list)
+                or not all(_is_int(x) for x in inc_steps + comp_steps)
+                or any(x >= incomplete_steps for x in inc_steps)
+                or inc_steps != [x for x in comp_steps if x < incomplete_steps]):
+            mismatches.append("viability.expulsion_steps")
+
     return len(mismatches) == 0, mismatches
+
+
+# ---------------------------------------------------------------------------
+# D7 from evidence. Copies of official small_n_utils.adaptive_unanimity_threshold and
+# classify_exhaustion at the pinned SHA; test_against_official.py checks them against
+# the pinned source. The judge recomputes the viability fields from the trial's own
+# series and events instead of trusting the exporter's summary.
+# ---------------------------------------------------------------------------
+
+def adaptive_unanimity_threshold(n_eligible):
+    if n_eligible <= 1:
+        return 1.0
+    return min(0.95, (n_eligible - 1) / n_eligible)
+
+
+def classify_exhaustion_status(modal_series, expulsion_steps, n_steps, n_alive, min_silence=500):
+    """Official classify_exhaustion, returning only the status string."""
+    if not expulsion_steps:
+        return "no_expulsions"
+    last_exp = expulsion_steps[-1]
+    remaining = n_steps - last_exp - 1
+    final_thresh = adaptive_unanimity_threshold(n_alive)
+    for t in range(last_exp + 1, n_steps):
+        if modal_series[t] >= final_thresh:
+            return "still_cycling"
+    if remaining >= min_silence:
+        return "genuine_exhaustion"
+    return "censored"
+
+
+def check_viability_evidence(trial, series, min_silence):
+    """Recompute the D7 inputs from a trial's series and expulsion events.
+
+    Checks, against the evidence in the same trial:
+      - expulsion_events: integer steps, strictly increasing, inside the run; distinct
+        victims inside the population;
+      - the official Use 2 trigger: every expulsion happens exactly when official
+        run_unanimity_triggered would expel (modal agreement at or above the adaptive
+        threshold for the living count, cooldown passed, more than 2 alive), and of the
+        modal target when modal_target_id is recorded; no step where the trigger held
+        goes without an expulsion;
+      - alive_ids and n_alive drop by exactly the expelled victims, one step after each
+        expulsion (series are recorded at the start of a step, before the trigger);
+      - viability.expulsion_steps, n_expulsions, n_alive, pct_consumed;
+      - viability.status: official classify_exhaustion for a complete trial.
+
+    Returns (problems, generative). problems is a list of strings, empty when the
+    viability object agrees with the evidence. generative is D7 recomputed from the
+    evidence (False for an incomplete trial), or None when it cannot be recomputed.
+    """
+    N = trial.get("N")
+    steps = trial.get("steps_completed")
+    viab = trial.get("viability")
+    if not _is_int(N) or not _is_int(steps) or not isinstance(viab, dict) or not isinstance(series, dict):
+        return ["N, steps_completed, viability or series is missing or malformed"], None
+
+    events = trial.get("expulsion_events")
+    err = _event_list_error(events, "expulsion_events", limit=steps)
+    if err:
+        return [err], None
+    exp_steps = [e["step"] for e in events]
+    victims = [e.get("victim_id") for e in events]
+    if any(b <= a for a, b in itertools.pairwise(exp_steps)):
+        return ["expulsion_events steps are not strictly increasing"], None
+    if not all(_is_int(v) and 0 <= v < N for v in victims) or len(set(victims)) != len(victims):
+        return ["expulsion_events victim_id values are not distinct ids inside the population"], None
+
+    modal = series.get("modal_agreement")
+    n_alive_key = _resolve_alias("n_alive", series)
+    n_alive = series.get(n_alive_key) if n_alive_key else None
+    alive_ids = series.get("alive_ids")
+    for name, arr in (("modal_agreement", modal), ("n_alive", n_alive), ("alive_ids", alive_ids)):
+        if not isinstance(arr, list) or len(arr) != steps:
+            return [f"series {name} is missing or does not have steps_completed entries"], None
+    if not all(_is_num(x) and math.isfinite(x) for x in modal):
+        return ["series modal_agreement has a non-numeric or non-finite entry"], None
+
+    problems = []
+
+    # Living set: everyone, minus each victim from the step after its expulsion.
+    alive = set(range(N))
+    by_step = dict(zip(exp_steps, victims))
+    for t in range(steps):
+        row = alive_ids[t]
+        if not isinstance(row, list) or set(row) != alive or len(row) != len(alive) or n_alive[t] != len(alive):
+            problems.append(f"alive_ids/n_alive at step {t} do not equal the population minus earlier victims")
+            break
+        if t in by_step:
+            alive.discard(by_step[t])
+
+    # Official Use 2 trigger, replayed on the recorded series.
+    cooldown = trial.get("unanimity_cooldown")
+    targets = series.get("modal_target_id")
+    if not _is_int(cooldown):
+        problems.append("unanimity_cooldown is missing or not an integer")
+    elif not problems:
+        if targets is not None and (not isinstance(targets, list) or len(targets) != steps):
+            problems.append("series modal_target_id does not have steps_completed entries")
+            targets = None
+        since = cooldown + 1
+        for t in range(steps):
+            fires = (modal[t] >= adaptive_unanimity_threshold(n_alive[t]) and since > cooldown
+                     and n_alive[t] > 2 and (targets is None or targets[t] is not None))
+            if fires != (t in by_step):
+                problems.append(f"expulsion schedule differs from the official trigger at step {t}")
+                break
+            if fires and targets is not None and targets[t] != by_step[t]:
+                problems.append(f"victim at step {t} is not the modal target")
+                break
+            since = 0 if fires else since + 1
+
+    n_exp = len(exp_steps)
+    n_alive_final = N - n_exp
+    pct = (N - n_alive_final) / N
+    if viab.get("expulsion_steps") != exp_steps:
+        problems.append("viability.expulsion_steps differs from expulsion_events")
+    if viab.get("n_expulsions") != n_exp:
+        problems.append(f"viability.n_expulsions={viab.get('n_expulsions')!r}, events give {n_exp}")
+    if viab.get("n_alive") != n_alive_final:
+        problems.append(f"viability.n_alive={viab.get('n_alive')!r}, events give {n_alive_final}")
+    if viab.get("pct_consumed") != pct:
+        problems.append(f"viability.pct_consumed={viab.get('pct_consumed')!r}, events give {pct!r}")
+
+    complete, _ = is_trial_complete(trial)
+    if not complete:
+        return problems, False
+    status = classify_exhaustion_status(modal, exp_steps, steps, n_alive_final, min_silence)
+    if viab.get("status") != status:
+        problems.append(f"viability.status={viab.get('status')!r}, official classify_exhaustion gives {status!r}")
+    generative = status == "genuine_exhaustion" and pct < 0.50 and n_exp >= 1
+    return problems, generative

@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple
 
 from judge_common import (
     check_v022_required_fields, is_trial_complete, check_determinism_prefix,
-    check_events_prefix
+    check_events_prefix, check_viability_evidence, load_series
 )
 
 JUDGE_VERSION = "0.2.2"
@@ -38,6 +38,8 @@ _DEFAULT_OUT = os.path.join(_HERE, "table10-result.json")
 
 PINNED_SHA = "89e7bbb57db62e3c830a8ca672a0805080df3970"
 N_STEPS = 5000
+# D7 for C-T10 uses official classify_exhaustion with min_silence=500 (contract, D7).
+MIN_SILENCE = 500
 SEEDS = [42 + r * 1000 for r in range(20)]
 
 # Published Table 10 viability rates (percent of 20 seeds that satisfy D7)
@@ -77,6 +79,7 @@ ISSUE_CODES = {
     "trial.metadata": "A trial metadata field is missing or wrong for C-T10.",
     "viability.missing": "viability object is missing or malformed.",
     "viability.d7": "viability D7 computation is inconsistent.",
+    "viability.evidence": "viability fields disagree with the trial's own series and expulsion events.",
     "v022.incomplete": "Incomplete trial (timed_out or steps != n_steps_planned) after allowed rerun.",
     "v022.multiple_reruns": "More than one labeled rerun for the same seed.",
     "v022.determinism": "Incomplete trial's arrays do not match completed rerun's prefix.",
@@ -421,6 +424,7 @@ def judge(trace_dir):
         trials[stem] = tr
     
     # Check metadata
+    generative_from_evidence = {}
     for stem, tr in trials.items():
         variant = tr["variant"]
         gamma = tr["gamma"]
@@ -441,6 +445,16 @@ def judge(trace_dir):
         
         valid, viab_issues, is_generative = check_viability_d7(viability, stem)
         cell.issues.extend(viab_issues)
+
+        # D7 from evidence: the cell counts only what the series and events support.
+        loaded, load_err = load_series(tr, tdir)
+        if load_err or loaded is None:
+            continue  # check_trial_metadata already reported it
+        problems, evidence_gen = check_viability_evidence(tr, loaded, MIN_SILENCE)
+        for detail in problems[:MAX_ISSUES_PER_TRIAL]:
+            cell.issues.append(issue("viability.evidence", detail, stem))
+        if not problems:
+            generative_from_evidence[stem] = evidence_gen
     
     # Check seed structure and rerun rules
     for cell_key, cell in cells.items():
@@ -519,7 +533,7 @@ def judge(trace_dir):
                     # Original is complete - check viability
                     seed_complete = True
                     valid, _, is_gen = check_viability_d7(orig_tr.get("viability"), orig_stem)
-                    if valid and is_gen:
+                    if valid and is_gen and generative_from_evidence.get(orig_stem) is True:
                         seed_viable = True
                     
                     # If there's a labeled rerun of a complete original, that's invalid
@@ -581,7 +595,7 @@ def judge(trace_dir):
                                 seed_complete = True
                                 seed_incomplete = False
                                 valid, _, is_gen = check_viability_d7(rerun_tr.get("viability"), rerun_stem)
-                                if valid and is_gen:
+                                if valid and is_gen and generative_from_evidence.get(rerun_stem) is True:
                                     seed_viable = True
                                 cell.n_reruns += 1
             
