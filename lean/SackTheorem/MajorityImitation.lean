@@ -183,8 +183,8 @@ theorem splitStateTwoTriangles_not_unanimous : ¬isUnanimous splitStateTwoTriang
     Leaving this unproved does not upgrade O5, which remains reported-by-source. -/
 proof_wanted period_at_most_2 (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
     (s0 : State V) :
-    ∃ n : ℕ, (∀ k : ℕ, (step G)^[n+k] s0 = (step G)^[n] s0) ∨
-             (∀ k : ℕ, (step G)^[n+k+2] s0 = (step G)^[n] s0)
+    ∃ n : ℕ, isFixedPoint G ((step G)^[n] s0) ∨
+             (∀ k : ℕ, (step G)^[n+k+2] s0 = (step G)^[n+k] s0)
 
 /-- Corollary: unanimity is not inevitable.
     There exist a graph and an initial state such that unanimity never occurs. -/
