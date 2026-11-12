@@ -1,4 +1,4 @@
-# Mimetic Lab claim map v0.2 (2026-11-11). Scheme: claims/README.md
+# Mimetic Lab claim map v0.2.1 (2026-11-11). Scheme: claims/README.md
 # No em or en dashes in this file by convention.
 
 milestones:
@@ -317,7 +317,7 @@ claims:
       equilibrium (notes 5-6). The abstract's 'tendency for all agents to converge
       on a single, universal object' is a simulation observation, not Theorem 1.
     lean:
-      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 head d0decde (update to the merge commit when merged)"
+      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 merge d67b670"
       theorems:
         - "convergence_on_weak_component: this statement, on weak components (equivalence closure of i ~ med i). No axioms."
         - "convergence_of_desire: Sack's form, on minimum mutual mediator sets."
@@ -336,7 +336,7 @@ claims:
     assumptions: As S1, plus no object self-links (no node desires itself).
     counterexample: Formal only.
     lean:
-      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 head d0decde (update to the merge commit when merged)"
+      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 merge d67b670"
       theorems: ["non_identity_of_desire: this statement, on minimum mutual mediator sets (Sack's form)."]
       note: "This is the form that is proved. A weak-component wording would need the same lemma that keeps S4 at stated, and is not claimed here."
     status: proved-in-lean
@@ -349,13 +349,16 @@ claims:
     statement: Without self-links, an equilibrium (obj) exists for a given med if and only if the mediation graph has at least two weak components.
     source: ["Sack 2021, Appendix, Theorem 3."]
     review_flags:
-      - "The sketch proves only the 'only if' direction. The 'if' direction needs a construction (component A desires a node of B and every other component desires a node of A); Lean will force it."
+      - "The Sack sketch proves only the 'only if' direction. The 'if' direction needs a construction (component A desires a node of B and every other component desires a node of A); it is still proof_wanted."
       - "Needs a nonempty node set: for empty N the hypotheses hold vacuously and no partition exists."
     lean:
-      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 head d0decde (update to the merge commit when merged)"
+      file: "lean/SackTheorem/MimeticNetwork.lean, PR #9 merge 560d037"
       theorems:
-        - "existence_equilibrium_no_narcissism_only_if and _if: Sack's wording, both directions, as proof_wanted (stated, not proved)."
+        - "existence_equilibrium_no_narcissism_only_if (proved, PR #9): Sack's wording. If no node desires itself and the network is in equilibrium, the nodes split into at least two nonempty, disjoint mutual mediator sets. Needs a nonempty node set. Axiom audit pins propext, Classical.choice, and Quot.sound; CI fails on sorryAx."
+        - "existence_equilibrium_no_narcissism_if: still proof_wanted (the 'if' direction)."
+        - "existence_equilibrium_no_narcissism_only_if_minimum: still proof_wanted. Needs the lemma that every weak component is a minimum mutual mediator set."
         - "unique_narcissist_of_weakly_connected (proved, the lab's reading): a weakly connected network in equilibrium has exactly one self-desiring node, which every node desires. This is the key step of 'only if'."
+      note: "Only-if is proved, in Sack's mutual mediator set wording, not as the claim statement's iff on weak components. Status stays stated until the 'if' direction is also done. This is a theorem about Sack's graph model, not about Girard."
     status: stated
 
   - id: S4
@@ -366,7 +369,7 @@ claims:
     statement: In equilibrium, the number of distinct objects is at most the number of weak components of the mediation graph.
     source: ["Sack 2021, Appendix, Theorem 5."]
     lean:
-      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 head d0decde (update to the merge commit when merged)"
+      file: "lean/SackTheorem/MimeticNetwork.lean, PR #2 merge d67b670"
       theorems: ["number_of_objects_bound (proved): at most the number of parts in any cover of the nodes by minimum mutual mediator sets."]
       gap: "This statement's weak-component form also needs the lemma that every weak component is a minimum mutual mediator set (not yet proved)."
     status: stated
@@ -445,3 +448,4 @@ changelog:
   - "2026-11-11 v0.1.1: redact W1 private-journal verbatim quote from the public map (pending Wes's OK). Status set to stated; confirmation note moved to review_flags."
   - "2026-11-11 v0.2: S1 and S2 proved-in-lean (PR #2); S3 and S4 stay stated with Lean status recorded; B4 added for Table 10 (contract C-T10, D7) and to M1 needs; G6 delta notes min_silence = 500 and that 'generative founding murder' is Black's label."
   - "2026-11-11 v0.2 review pass: S2 statement reworded to Sack's minimum mutual mediator set form, matching non_identity_of_desire (status stays proved-in-lean); B4 Table 10 gloss corrected against draft v18 cells (pass test remains cell-by-cell); Girard misrecognition sentence moved from B4 formalization_delta onto G6 with G6's source; W1 redaction from v0.1.1 kept on rebase onto main after PR #3."
+  - "2026-11-11 v0.2.1: S3 only-if noted as proved in Lean (PR #9 merge 560d037, existence_equilibrium_no_narcissism_only_if, Sack's mutual mediator set wording); S3 stays stated until the if direction is also done; Lean file cites for S1, S2, and S4 updated from PR #2 head d0decde to merge d67b670."

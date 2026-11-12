@@ -1,6 +1,6 @@
 # Claim map: scheme and rules
 
-Status: draft v0.2, 2026-11-11. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
+Status: draft v0.2.1, 2026-11-11. Working file for the lab. Edit claims in `claims.yaml`; this file only defines the scheme.
 
 ## Epistemic limit
 
