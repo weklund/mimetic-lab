@@ -480,8 +480,9 @@ class ContractV022(unittest.TestCase):
                 "system_tension": [1.0, 1.2, 1.5, 1.8, 2.0]
             }
         }
+        # For inline series, trial_dir can be any path (no NPZ files)
         matches, mismatches = JC.check_determinism_prefix(
-            incomplete, complete, ["modal_agreement", "system_tension"]
+            incomplete, complete, ["modal_agreement", "system_tension"], "."
         )
         self.assertTrue(matches)
         self.assertEqual(len(mismatches), 0)
@@ -502,7 +503,7 @@ class ContractV022(unittest.TestCase):
             }
         }
         matches, mismatches = JC.check_determinism_prefix(
-            incomplete, complete, ["modal_agreement", "system_tension"]
+            incomplete, complete, ["modal_agreement", "system_tension"], "."
         )
         self.assertFalse(matches)
         self.assertIn("modal_agreement", mismatches)
@@ -524,7 +525,7 @@ class ContractV022(unittest.TestCase):
             }
         }
         matches, mismatches = JC.check_determinism_prefix(
-            incomplete, complete, ["alive_ids", "top_targets"]
+            incomplete, complete, ["alive_ids", "top_targets"], "."
         )
         self.assertTrue(matches)
         self.assertEqual(len(mismatches), 0)
@@ -545,7 +546,7 @@ class ContractV022(unittest.TestCase):
             }
         }
         matches, mismatches = JC.check_determinism_prefix(
-            incomplete, complete, ["alive_ids", "top_targets"]
+            incomplete, complete, ["alive_ids", "top_targets"], "."
         )
         self.assertFalse(matches)
         self.assertIn("top_targets", mismatches)
