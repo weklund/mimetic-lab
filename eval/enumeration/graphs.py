@@ -57,14 +57,13 @@ def generate_nonisomorphic_connected_graphs(n: int) -> List[nx.Graph]:
     """
     Generate one representative from each isomorphism class of connected graphs on n nodes.
     
-    This is more efficient for large n but returns unlabeled (non-isomorphic) representatives.
-    For completeness verification, we use all labeled graphs.
+    Uses nx.graph_atlas_g which contains all graphs up to 7 nodes.
     
     Args:
-        n: Number of nodes
+        n: Number of nodes (must be <= 7 for graph_atlas)
         
     Returns:
-        List of representative graphs (one per isomorphism class)
+        List of representative connected graphs (one per isomorphism class)
     """
     if n == 0:
         return []
@@ -74,16 +73,17 @@ def generate_nonisomorphic_connected_graphs(n: int) -> List[nx.Graph]:
         G.add_node(0)
         return [G]
     
-    seen_graphs = []
+    if n > 7:
+        raise ValueError(f"graph_atlas only goes up to n=7, got n={n}")
     
-    for G in generate_all_connected_graphs(n):
-        is_new = True
-        for H in seen_graphs:
-            if nx.is_isomorphic(G, H):
-                is_new = False
-                break
-        
-        if is_new:
-            seen_graphs.append(G.copy())
+    result = []
+    for G in nx.graph_atlas_g():
+        if G.number_of_nodes() == n and nx.is_connected(G):
+            result.append(G)
     
-    return seen_graphs
+    return result
+
+
+def count_nonisomorphic_connected_graphs(n: int) -> int:
+    """Count number of connected isomorphism classes on n nodes."""
+    return len(generate_nonisomorphic_connected_graphs(n))

@@ -9,14 +9,21 @@ import sys
 from collections import defaultdict
 import networkx as nx
 
-from .graphs import generate_all_connected_graphs, count_connected_graphs
+from .graphs import (
+    generate_all_connected_graphs,
+    count_connected_graphs,
+    generate_nonisomorphic_connected_graphs,
+    count_nonisomorphic_connected_graphs
+)
 from .majority import enumerate_binary_majority, enumerate_vertex_majority
 from .voter import analyze_absorbing_states
 
 
-def run_binary_enumeration(max_n: int = 6) -> dict:
+def run_binary_enumeration_isomorphism_classes(max_n: int = 6) -> dict:
     """
-    Run binary majority enumeration (O5) for all graphs up to n nodes.
+    Run binary majority enumeration (O5) on isomorphism classes.
+    
+    Enumerates all connected isomorphism classes for n=1..6 with all 2^n assignments.
     
     Args:
         max_n: Maximum number of nodes
@@ -27,25 +34,23 @@ def run_binary_enumeration(max_n: int = 6) -> dict:
     results = {}
     
     for n in range(1, max_n + 1):
-        print(f"Enumerating binary majority for n={n}...", file=sys.stderr)
+        print(f"Enumerating binary majority (isomorphism classes) for n={n}...", file=sys.stderr)
         
         graph_results = []
-        graph_count = 0
+        graphs = generate_nonisomorphic_connected_graphs(n)
         
-        for G in generate_all_connected_graphs(n):
-            graph_count += 1
-            
-            if graph_count > 100 and n >= 5:
-                print(f"  (stopping at {graph_count} graphs for n={n})", file=sys.stderr)
-                break
-            
+        for G in graphs:
             result = enumerate_binary_majority(G)
             graph_results.append(result)
+        
+        graph_count = len(graphs)
+        print(f"  Completed {graph_count} isomorphism classes for n={n}", file=sys.stderr)
         
         unanimous_fixed = sum(r['unanimous_fixed'] for r in graph_results)
         split_fixed = sum(r['split_fixed'] for r in graph_results)
         period_2 = sum(r['period_2'] for r in graph_results)
         period_gt_2 = sum(r['period_gt_2'] for r in graph_results)
+        unknown = sum(r['unknown'] for r in graph_results)
         
         total_configs = sum(r['total_configs'] for r in graph_results)
         
@@ -56,51 +61,70 @@ def run_binary_enumeration(max_n: int = 6) -> dict:
             'split_fixed': split_fixed,
             'period_2': period_2,
             'period_gt_2': period_gt_2,
+            'unknown': unknown,
             'counterexamples': [r['counterexamples'] for r in graph_results if r['counterexamples']]
         }
     
     return results
 
 
-def run_vertex_enumeration(max_n: int = 4) -> dict:
+def run_vertex_enumeration_isomorphism_classes(max_n: int = 4) -> dict:
     """
-    Run vertex-valued majority enumeration (O6) for small graphs.
+    Run vertex-valued majority enumeration (O6) on isomorphism classes.
+    
+    Complete enumeration for n=1..4 (growth is n^n assignments per graph).
     
     Args:
-        max_n: Maximum number of nodes (kept small due to n^n growth)
+        max_n: Maximum number of nodes (kept at 4 due to n^n growth)
         
     Returns:
-        Dictionary with results by n
+        Dictionary with results by n, including configuration counts
     """
     results = {}
     
     for n in range(1, max_n + 1):
-        print(f"Enumerating vertex-valued majority for n={n}...", file=sys.stderr)
+        print(f"Enumerating vertex-valued majority (isomorphism classes) for n={n}...", file=sys.stderr)
         
-        graph_count = 0
-        self_target_cases = 0
+        graphs = generate_nonisomorphic_connected_graphs(n)
+        graph_count = len(graphs)
         
-        for G in generate_all_connected_graphs(n):
-            graph_count += 1
-            
-            if graph_count > 20 and n >= 4:
-                print(f"  (stopping at {graph_count} graphs for n={n})", file=sys.stderr)
-                break
-            
+        unanimous_fixed = 0
+        split_fixed = 0
+        period_2 = 0
+        period_gt_2 = 0
+        unknown = 0
+        configs_with_self_target = 0
+        total_configs = 0
+        
+        for G in graphs:
             result = enumerate_vertex_majority(G, allow_self_target=False)
-            self_target_cases += result['self_target_by_majority_cases']
+            unanimous_fixed += result['unanimous_fixed']
+            split_fixed += result['split_fixed']
+            period_2 += result['period_2']
+            period_gt_2 += result['period_gt_2']
+            unknown += result['unknown']
+            configs_with_self_target += result['configs_with_self_target_by_majority']
+            total_configs += result['total_configs']
+        
+        print(f"  Completed {graph_count} isomorphism classes for n={n}", file=sys.stderr)
         
         results[n] = {
             'graph_count': graph_count,
-            'self_target_by_majority_cases': self_target_cases
+            'total_configs': total_configs,
+            'unanimous_fixed': unanimous_fixed,
+            'split_fixed': split_fixed,
+            'period_2': period_2,
+            'period_gt_2': period_gt_2,
+            'unknown': unknown,
+            'configs_with_self_target': configs_with_self_target
         }
     
     return results
 
 
-def run_voter_analysis(max_n: int = 6) -> dict:
+def run_voter_analysis_isomorphism_classes(max_n: int = 6) -> dict:
     """
-    Analyze voter model absorbing states (O7).
+    Analyze voter model absorbing states (O7) on isomorphism classes.
     
     Args:
         max_n: Maximum number of nodes
@@ -111,22 +135,21 @@ def run_voter_analysis(max_n: int = 6) -> dict:
     results = {}
     
     for n in range(3, max_n + 1):
-        print(f"Analyzing voter model for n={n}...", file=sys.stderr)
+        print(f"Analyzing voter model (isomorphism classes) for n={n}...", file=sys.stderr)
+        
+        graphs = generate_nonisomorphic_connected_graphs(n)
+        graph_count = len(graphs)
         
         bipartite_count = 0
         non_bipartite_count = 0
         
-        graph_count = 0
-        for G in generate_all_connected_graphs(n):
-            graph_count += 1
-            
-            if graph_count > 50 and n >= 5:
-                break
-            
+        for G in graphs:
             if nx.is_bipartite(G):
                 bipartite_count += 1
             else:
                 non_bipartite_count += 1
+        
+        print(f"  Completed {graph_count} isomorphism classes for n={n}", file=sys.stderr)
         
         results[n] = {
             'graph_count': graph_count,
@@ -170,15 +193,15 @@ def generate_markdown_report(
     lines.append("")
     lines.append("### Enumeration Results")
     lines.append("")
-    lines.append("| n | Graphs | Total Configs | Unanimous Fixed | Split Fixed | 2-Cycles | Period > 2 |")
-    lines.append("|---|--------|---------------|-----------------|-------------|----------|------------|")
+    lines.append("| n | Graphs | Total Configs | Unanimous Fixed | Split Fixed | 2-Cycles | Period > 2 | Unknown |")
+    lines.append("|---|--------|---------------|-----------------|-------------|----------|------------|---------|")
     
     for n in sorted(binary_results.keys()):
         r = binary_results[n]
         lines.append(
             f"| {n} | {r['graph_count']} | {r['total_configs']} | "
             f"{r['unanimous_fixed']} | {r['split_fixed']} | "
-            f"{r['period_2']} | {r['period_gt_2']} |"
+            f"{r['period_2']} | {r['period_gt_2']} | {r['unknown']} |"
         )
     
     lines.append("")
@@ -219,17 +242,36 @@ def generate_markdown_report(
     lines.append("**Exploration convention**: For this enumeration, we count such cases but")
     lines.append("do not adopt the self-target (the agent keeps its own target).")
     lines.append("")
-    lines.append("### Self-Target Cases Found")
+    lines.append("### Enumeration Results for Vertex-Valued")
     lines.append("")
-    lines.append("| n | Graphs Scanned | Self-Target-by-Majority Cases |")
-    lines.append("|---|----------------|-------------------------------|")
+    lines.append("| n | Graphs | Total Configs | Unanimous Fixed | Split Fixed | 2-Cycles | Period > 2 | Unknown |")
+    lines.append("|---|--------|---------------|-----------------|-------------|----------|------------|---------|")
     
     for n in sorted(vertex_results.keys()):
         r = vertex_results[n]
-        lines.append(f"| {n} | {r['graph_count']} | {r['self_target_by_majority_cases']} |")
+        lines.append(
+            f"| {n} | {r['graph_count']} | {r['total_configs']} | "
+            f"{r['unanimous_fixed']} | {r['split_fixed']} | "
+            f"{r['period_2']} | {r['period_gt_2']} | {r['unknown']} |"
+        )
     
     lines.append("")
-    lines.append("These cases arise rarely in the enumerated configurations.")
+    lines.append("### Self-Target Cases")
+    lines.append("")
+    lines.append("| n | Configs with Self-Target-by-Majority | Total Configs | Rate |")
+    lines.append("|---|--------------------------------------|---------------|------|")
+    
+    for n in sorted(vertex_results.keys()):
+        r = vertex_results[n]
+        rate = r['configs_with_self_target'] / r['total_configs'] if r['total_configs'] > 0 else 0
+        lines.append(
+            f"| {n} | {r['configs_with_self_target']} | {r['total_configs']} | {rate:.4f} |"
+        )
+    
+    lines.append("")
+    lines.append("**Note**: This is an exploration convention, not a sourced rule. Configurations")
+    lines.append("where a strict majority of an agent's neighbors target that agent. The enumeration")
+    lines.append("keeps the agent's own target in such cases.")
     lines.append("")
     
     lines.append("## Voter Model (O7)")
@@ -264,24 +306,26 @@ def generate_markdown_report(
     lines.append("")
     lines.append("## Completeness")
     lines.append("")
-    lines.append("The enumeration method generates all connected labeled graphs on n nodes")
-    lines.append("by enumerating all possible edge sets and filtering for connectivity.")
+    lines.append("This enumeration uses connected isomorphism classes via nx.graph_atlas_g.")
     lines.append("")
-    lines.append("Known connected graph counts are verified in the test suite:")
+    lines.append("Known nonisomorphic connected graph counts (verified in tests):")
     lines.append("")
-    lines.append("- n=1: 1 graph")
-    lines.append("- n=2: 1 graph")
-    lines.append("- n=3: 4 graphs")
-    lines.append("- n=4: 38 graphs")
+    lines.append("- n=1: 1 class")
+    lines.append("- n=2: 1 class")
+    lines.append("- n=3: 2 classes")
+    lines.append("- n=4: 6 classes")
+    lines.append("- n=5: 21 classes")
+    lines.append("- n=6: 112 classes")
     lines.append("")
-    lines.append("For larger n, we sample the first 50-100 graphs to keep CI runtime reasonable.")
+    lines.append("All isomorphism classes enumerated for n=1..6 with all 2^n binary assignments (O5)")
+    lines.append("and all valid vertex-target assignments for n=1..4 (O6).")
     lines.append("")
     lines.append("## Conclusion")
     lines.append("")
-    lines.append("These enumerations confirm the stated properties of O5, O6, and O7 on small networks:")
+    lines.append("These enumerations confirm the stated properties of O5, O6, and O7:")
     lines.append("")
-    lines.append("- O5: Binary majority reaches a fixed point or 2-cycle (no counterexamples found)")
-    lines.append("- O6: Split fixed points exist; self-target-by-majority cases are rare")
+    lines.append("- O5: Binary majority reaches a fixed point or 2-cycle (no period > 2 found)")
+    lines.append("- O6: Split fixed points exist; self-target-by-majority configurations documented")
     lines.append("- O7: Voter model unanimity is schedule-dependent")
     lines.append("")
     lines.append("This is the exploration step before formal proof work (issue #15).")
@@ -292,11 +336,11 @@ def generate_markdown_report(
 
 def main():
     """Generate the full enumeration report."""
-    print("Starting enumeration...", file=sys.stderr)
+    print("Starting enumeration (isomorphism classes)...", file=sys.stderr)
     
-    binary_results = run_binary_enumeration(max_n=6)
-    vertex_results = run_vertex_enumeration(max_n=4)
-    voter_results = run_voter_analysis(max_n=6)
+    binary_results = run_binary_enumeration_isomorphism_classes(max_n=6)
+    vertex_results = run_vertex_enumeration_isomorphism_classes(max_n=4)
+    voter_results = run_voter_analysis_isomorphism_classes(max_n=6)
     
     report = generate_markdown_report(binary_results, vertex_results, voter_results)
     

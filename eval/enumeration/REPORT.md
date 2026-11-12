@@ -1,21 +1,32 @@
-Starting enumeration...
-Enumerating binary majority for n=1...
-Enumerating binary majority for n=2...
-Enumerating binary majority for n=3...
-Enumerating binary majority for n=4...
-Enumerating binary majority for n=5...
-  (stopping at 101 graphs for n=5)
-Enumerating binary majority for n=6...
-  (stopping at 101 graphs for n=6)
-Enumerating vertex-valued majority for n=1...
-Enumerating vertex-valued majority for n=2...
-Enumerating vertex-valued majority for n=3...
-Enumerating vertex-valued majority for n=4...
-  (stopping at 21 graphs for n=4)
-Analyzing voter model for n=3...
-Analyzing voter model for n=4...
-Analyzing voter model for n=5...
-Analyzing voter model for n=6...
+Starting enumeration (isomorphism classes)...
+Enumerating binary majority (isomorphism classes) for n=1...
+  Completed 1 isomorphism classes for n=1
+Enumerating binary majority (isomorphism classes) for n=2...
+  Completed 1 isomorphism classes for n=2
+Enumerating binary majority (isomorphism classes) for n=3...
+  Completed 2 isomorphism classes for n=3
+Enumerating binary majority (isomorphism classes) for n=4...
+  Completed 6 isomorphism classes for n=4
+Enumerating binary majority (isomorphism classes) for n=5...
+  Completed 21 isomorphism classes for n=5
+Enumerating binary majority (isomorphism classes) for n=6...
+  Completed 112 isomorphism classes for n=6
+Enumerating vertex-valued majority (isomorphism classes) for n=1...
+  Completed 1 isomorphism classes for n=1
+Enumerating vertex-valued majority (isomorphism classes) for n=2...
+  Completed 1 isomorphism classes for n=2
+Enumerating vertex-valued majority (isomorphism classes) for n=3...
+  Completed 2 isomorphism classes for n=3
+Enumerating vertex-valued majority (isomorphism classes) for n=4...
+  Completed 6 isomorphism classes for n=4
+Analyzing voter model (isomorphism classes) for n=3...
+  Completed 2 isomorphism classes for n=3
+Analyzing voter model (isomorphism classes) for n=4...
+  Completed 6 isomorphism classes for n=4
+Analyzing voter model (isomorphism classes) for n=5...
+  Completed 21 isomorphism classes for n=5
+Analyzing voter model (isomorphism classes) for n=6...
+  Completed 112 isomorphism classes for n=6
 # Opinion Dynamics Enumeration Report
 
 Part of issue #14 item 2: exhaustive enumeration of small networks.
@@ -41,14 +52,14 @@ Claim: Every trajectory reaches a fixed point or a 2-cycle.
 
 ### Enumeration Results
 
-| n | Graphs | Total Configs | Unanimous Fixed | Split Fixed | 2-Cycles | Period > 2 |
-|---|--------|---------------|-----------------|-------------|----------|------------|
-| 1 | 1 | 2 | 2 | 0 | 0 | 0 |
-| 2 | 1 | 4 | 2 | 0 | 2 | 0 |
-| 3 | 4 | 32 | 26 | 0 | 6 | 0 |
-| 4 | 38 | 608 | 468 | 36 | 104 | 0 |
-| 5 | 101 | 3200 | 1832 | 500 | 868 | 0 |
-| 6 | 101 | 6400 | 2858 | 1114 | 2428 | 0 |
+| n | Graphs | Total Configs | Unanimous Fixed | Split Fixed | 2-Cycles | Period > 2 | Unknown |
+|---|--------|---------------|-----------------|-------------|----------|------------|---------|
+| 1 | 1 | 2 | 2 | 0 | 0 | 0 | 0 |
+| 2 | 1 | 4 | 2 | 0 | 2 | 0 | 0 |
+| 3 | 2 | 16 | 14 | 0 | 2 | 0 | 0 |
+| 4 | 6 | 96 | 66 | 6 | 24 | 0 | 0 |
+| 5 | 21 | 672 | 520 | 50 | 102 | 0 | 0 |
+| 6 | 112 | 7168 | 5240 | 542 | 1386 | 0 | 0 |
 
 **Result**: No trajectory with period > 2 was found. This confirms O5 on the enumerated ensemble.
 
@@ -72,16 +83,27 @@ a strict majority of an agent's neighbors target that agent.
 **Exploration convention**: For this enumeration, we count such cases but
 do not adopt the self-target (the agent keeps its own target).
 
-### Self-Target Cases Found
+### Enumeration Results for Vertex-Valued
 
-| n | Graphs Scanned | Self-Target-by-Majority Cases |
-|---|----------------|-------------------------------|
-| 1 | 1 | 0 |
-| 2 | 1 | 2 |
-| 3 | 4 | 48 |
-| 4 | 21 | 2488 |
+| n | Graphs | Total Configs | Unanimous Fixed | Split Fixed | 2-Cycles | Period > 2 | Unknown |
+|---|--------|---------------|-----------------|-------------|----------|------------|---------|
+| 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 2 | 1 | 1 | 0 | 1 | 0 | 0 | 0 |
+| 3 | 2 | 16 | 0 | 16 | 0 | 0 | 0 |
+| 4 | 6 | 486 | 0 | 452 | 34 | 0 | 0 |
 
-These cases arise rarely in the enumerated configurations.
+### Self-Target Cases
+
+| n | Configs with Self-Target-by-Majority | Total Configs | Rate |
+|---|--------------------------------------|---------------|------|
+| 1 | 0 | 0 | 0.0000 |
+| 2 | 1 | 1 | 1.0000 |
+| 3 | 14 | 16 | 0.8750 |
+| 4 | 352 | 486 | 0.7243 |
+
+**Note**: This is an exploration convention, not a sourced rule. Configurations
+where a strict majority of an agent's neighbors target that agent. The enumeration
+keeps the agent's own target in such cases.
 
 ## Voter Model (O7)
 
@@ -98,10 +120,10 @@ Claim: Almost-sure unanimity depends on the update schedule.
 
 | n | Graphs Scanned | Bipartite | Non-Bipartite |
 |---|----------------|-----------|---------------|
-| 3 | 4 | 3 | 1 |
-| 4 | 38 | 19 | 19 |
-| 5 | 51 | 50 | 0 |
-| 6 | 51 | 50 | 0 |
+| 3 | 2 | 1 | 1 |
+| 4 | 6 | 3 | 3 |
+| 5 | 21 | 5 | 16 |
+| 6 | 112 | 17 | 95 |
 
 The test suite verifies that:
 
@@ -111,24 +133,26 @@ The test suite verifies that:
 
 ## Completeness
 
-The enumeration method generates all connected labeled graphs on n nodes
-by enumerating all possible edge sets and filtering for connectivity.
+This enumeration uses connected isomorphism classes via nx.graph_atlas_g.
 
-Known connected graph counts are verified in the test suite:
+Known nonisomorphic connected graph counts (verified in tests):
 
-- n=1: 1 graph
-- n=2: 1 graph
-- n=3: 4 graphs
-- n=4: 38 graphs
+- n=1: 1 class
+- n=2: 1 class
+- n=3: 2 classes
+- n=4: 6 classes
+- n=5: 21 classes
+- n=6: 112 classes
 
-For larger n, we sample the first 50-100 graphs to keep CI runtime reasonable.
+All isomorphism classes enumerated for n=1..6 with all 2^n binary assignments (O5)
+and all valid vertex-target assignments for n=1..4 (O6).
 
 ## Conclusion
 
-These enumerations confirm the stated properties of O5, O6, and O7 on small networks:
+These enumerations confirm the stated properties of O5, O6, and O7:
 
-- O5: Binary majority reaches a fixed point or 2-cycle (no counterexamples found)
-- O6: Split fixed points exist; self-target-by-majority cases are rare
+- O5: Binary majority reaches a fixed point or 2-cycle (no period > 2 found)
+- O6: Split fixed points exist; self-target-by-majority configurations documented
 - O7: Voter model unanimity is schedule-dependent
 
 This is the exploration step before formal proof work (issue #15).

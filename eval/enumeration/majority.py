@@ -244,7 +244,7 @@ def enumerate_vertex_majority(
         allow_self_target: Whether to allow self-targeting in initial states
         
     Returns:
-        Dictionary with statistics including self-target-by-majority cases
+        Dictionary with statistics including self-target-by-majority config counts
     """
     n = G.number_of_nodes()
     
@@ -253,29 +253,7 @@ def enumerate_vertex_majority(
     period_2 = 0
     period_gt_2 = 0
     unknown = 0
-    self_target_by_majority_cases = 0
-    
-    def step_with_tracking(g, targets):
-        nonlocal self_target_by_majority_cases
-        
-        for v in range(n):
-            neighbors = list(g.neighbors(v))
-            if not neighbors:
-                continue
-            
-            neighbor_targets = [targets[u] for u in neighbors]
-            target_counts = {}
-            for t in neighbor_targets:
-                target_counts[t] = target_counts.get(t, 0) + 1
-            
-            max_count = max(target_counts.values())
-            
-            if max_count > len(neighbor_targets) / 2:
-                candidates = [t for t, c in target_counts.items() if c == max_count]
-                if len(candidates) == 1 and candidates[0] == v:
-                    self_target_by_majority_cases += 1
-        
-        return majority_vertex_step(g, targets, allow_self_target)
+    configs_with_self_target_by_majority = 0
     
     def generate_initial_states():
         """Generate all valid initial target assignments."""
@@ -294,13 +272,37 @@ def enumerate_vertex_majority(
             
             yield from generate_no_self()
     
+    def check_self_target_by_majority(g, targets):
+        """Check if any agent has a strict majority of neighbors targeting that agent."""
+        for v in range(n):
+            neighbors = list(g.neighbors(v))
+            if not neighbors:
+                continue
+            
+            neighbor_targets = [targets[u] for u in neighbors]
+            target_counts = {}
+            for t in neighbor_targets:
+                target_counts[t] = target_counts.get(t, 0) + 1
+            
+            max_count = max(target_counts.values())
+            
+            if max_count > len(neighbor_targets) / 2:
+                candidates = [t for t, c in target_counts.items() if c == max_count]
+                if len(candidates) == 1 and candidates[0] == v:
+                    return True
+        
+        return False
+    
     total = 0
     for initial in generate_initial_states():
         total += 1
         
+        if check_self_target_by_majority(G, initial):
+            configs_with_self_target_by_majority += 1
+        
         result = classify_trajectory(
             G, initial,
-            step_with_tracking
+            lambda g, s: majority_vertex_step(g, s, allow_self_target)
         )
         
         if result['type'] == 'unanimous_fixed':
@@ -323,5 +325,5 @@ def enumerate_vertex_majority(
         'period_2': period_2,
         'period_gt_2': period_gt_2,
         'unknown': unknown,
-        'self_target_by_majority_cases': self_target_by_majority_cases
+        'configs_with_self_target_by_majority': configs_with_self_target_by_majority
     }
