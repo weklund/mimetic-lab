@@ -1,4 +1,4 @@
-# Mimetic Lab claim map v0.2.4 (2026-11-12). Scheme: claims/README.md
+# Mimetic Lab claim map v0.2.5 (2026-11-12). Scheme: claims/README.md. Roadmap: ROADMAP.md
 # No em or en dashes in this file by convention.
 
 milestones:
@@ -9,6 +9,13 @@ milestones:
     target: S1
     needs: [G1, S1]
     next: [S3, S4, S2]
+  M3-literature-map:
+    target: O8
+    needs: [O8, O9, O10, O11, O12, O13, O14, O15, O16, O17, O18, O19, O20, O21]
+  M4-minimal-model:
+    target: L2
+    needs: [G4, O8, O11, O6, L1, L2]
+    next: [G5, G6]
 
 claims:
 
@@ -635,12 +642,16 @@ claims:
       majority, no objects or rivalry, no multiplying attraction). This
       reading therefore does not support G4's 'inevitable' unification
       against a single individual. If self-targeting is forbidden, not every
-      agent can target the same victim, so the unanimity test used here is
-      ordinary agreement (all agents holding the same label), and the
-      examples still fail it. A Lean proof of these examples upgrades only
-      this claim, never G4.
+      agent can hold the same label, so ordinary agreement is impossible and
+      is not the test. The test is the single-victim state: some v such that
+      every agent other than v targets v, with v's own target free. The
+      two-triangle vertex-target example fails that test as well (each
+      faction targets a member of the other). A Lean proof of these examples
+      upgrades only this claim, never G4.
     stands_in_for: G4
     status: stated
+    review_flags:
+      - "v0.2.5: the delta's unanimity test was ordinary agreement, which no-self-targeting makes impossible; corrected to the single-victim state. With the PR #30 implementation of this rule on every connected graph from networkx graph_atlas_g: 8,679 of 21,504 no-self starts at n = 5 reach a single-victim fixed point, and 3,076 of 3,360 single-victim states at n = 6 are fixed points (T1 in eval/models/minimal-model-v0.md gives the exact condition). The named examples are unchanged."
     counterexample: >
       A proof that one of the named configurations is not a fixed point
       under the rule stated for it, or a theorem that every trajectory
@@ -689,6 +700,463 @@ claims:
       sourced theorem that synchronous voter update on a connected bipartite
       graph reaches unanimity almost surely.
 
+  - id: O8
+    title: Threshold model of collective behavior (Granovetter)
+    priority: P1
+    milestone: M3-literature-map
+    kind: model
+    statement: >
+      Each person joins a collective action once the fraction already
+      participating reaches that person's threshold. The final number who
+      join is fixed by the whole threshold distribution; a change in one
+      person's threshold can move the outcome from almost nobody to almost
+      everybody, and the average threshold does not predict the outcome.
+    source:
+      - "Granovetter, 'Threshold Models of Collective Behavior', American Journal of Sociology 83(6) (1978) 1420-1443. Not opened; citation and page range from memory."
+    assumptions:
+      - "One binary action, joined once and not left."
+      - "Thresholds are fixed and heterogeneous; in the basic model every agent sees the whole population (no network)."
+    counterexample: A threshold distribution whose equilibrium is not the one given by the cumulative distribution crossing the diagonal, or evidence that thresholds are not stable traits.
+    formalization_delta: >
+      Relative to G4: the pull to join grows with the number already joined,
+      which is the frequency dependence G4 asserts, but the action is joining a
+      riot or a strike, not targeting a person; no object, no rivalry, no
+      victim. Heterogeneous thresholds are the mechanism by which a small
+      start can grow, which the strict majority reading (O5, O6) lacks (T2 in
+      eval/models/minimal-model-v0.md). A pass never upgrades G4.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O9
+    title: Global cascades from one seed need a window of connectivity (Watts)
+    priority: P1
+    milestone: M3-literature-map
+    kind: theorem
+    statement: >
+      On a random network where each node adopts once the fraction of its
+      neighbors that have adopted reaches its threshold, a single early
+      adopter triggers a global cascade only inside a window of average
+      degree: connected enough for the vulnerable nodes (threshold at most
+      one over degree) to form a percolating cluster, and not so connected
+      that nodes resist a single adopting neighbor. Inside the window
+      cascades are rare and, when they occur, global.
+    source:
+      - "Watts, 'A simple model of global cascades on random networks', Proceedings of the National Academy of Sciences 99(9) (2002) 5766-5771. Not opened; citation and page range from memory."
+    assumptions:
+      - "Random graph with a given degree distribution; thresholds as fractions of degree; one seed; adoption is permanent."
+    counterexample: A degree distribution and threshold distribution for which cascade frequency is not governed by the vulnerable cluster condition.
+    formalization_delta: >
+      Relative to G4: the network form of O8. Adoption is a binary state, not
+      a target. Vulnerable nodes are the periphery, which matches T2's
+      observation that under strict majority only leaves move first. A pass
+      never upgrades G4.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O10
+    title: Complex contagion needs reinforcement from several contacts (Centola and Macy)
+    priority: P1
+    milestone: M3-literature-map
+    kind: model
+    statement: >
+      Behaviors that need confirmation from several contacts (complex
+      contagion) spread farther and faster through clustered networks with
+      redundant ties than through random networks with long ties, the reverse
+      of simple contagion, in which one contact suffices. Centola's online
+      experiment reported the same for a health behavior.
+    source:
+      - "Centola and Macy, 'Complex Contagions and the Weakness of Long Ties', American Journal of Sociology 113(3) (2007) 702-734. Not opened; citation from memory."
+      - "Centola, 'The Spread of Behavior in an Online Social Network Experiment', Science 329 (2010) 1194-1197. Not opened; citation from memory. Empirical support for the model claim."
+    assumptions:
+      - "Adoption requires a threshold of at least two adopting neighbors (model); the experiment assigned participants to clustered or random networks."
+    counterexample: A complex contagion that spreads faster on the random network than on the clustered one, holding degree fixed.
+    formalization_delta: >
+      Relative to G4: distinguishes one-contact copying (the voter reading,
+      O7) from reinforcement by several (the majority and threshold readings,
+      O5, O6, O8). The content is a behavior, not hostility toward a person;
+      no victim. It says where on a network a snowball can run, not whether it
+      ends on one individual. A pass never upgrades G4.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O11
+    title: Conformist transmission amplifies the majority (Boyd and Richerson; Henrich and Boyd)
+    priority: P1
+    milestone: M3-literature-map
+    kind: model
+    statement: >
+      A frequency-dependent bias under which the probability of adopting a
+      cultural variant exceeds its frequency when it is common and falls
+      below it when it is rare drives groups toward internal homogeneity and
+      maintains differences between groups. Henrich and Boyd give conditions
+      under which such a bias evolves.
+    source:
+      - "Boyd and Richerson, Culture and the Evolutionary Process (University of Chicago Press, 1985), the chapter on frequency-dependent bias. Not opened; chapter number not given from memory."
+      - "Henrich and Boyd, 'The evolution of conformist transmission and the emergence of between-group differences', Evolution and Human Behavior 19(4) (1998) 215-241. Not opened; citation and page range from memory."
+    assumptions:
+      - "Variants are discrete cultural traits; the population is large and usually unstructured; the bias is a fixed sigmoid in frequency."
+    counterexample: A conformist bias of this form that does not homogenize a well-mixed population, or evidence that observed social learning shows no such bias.
+    formalization_delta: >
+      Relative to G4: 'the power of mimetic attraction multiplies with the
+      number of those polarized' is a conformist bias on hostility targets.
+      Black's salience exponent gamma greater than 1 (B1) is a conformist
+      bias in this sense; Black does not cite this literature, and the
+      correspondence is the lab's, to be checked when the source is opened.
+      Variants here are neutral traits, not hostility; no object, no rivalry,
+      no victim. A pass never upgrades G4.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O12
+    title: Prestige-biased transmission (Henrich and Gil-White)
+    priority: P1
+    milestone: M3-literature-map
+    kind: model
+    statement: >
+      Learners preferentially copy individuals who appear skilled or
+      successful and pay deference (attention, proximity, gifts) for access
+      to them. Prestige is freely conferred and distinct from dominance, which
+      is taken by force.
+    source:
+      - "Henrich and Gil-White, 'The evolution of prestige: freely conferred deference as a mechanism for enhancing the benefits of cultural transmission', Evolution and Human Behavior 22(3) (2001) 165-196. Not opened; citation and page range from memory."
+    assumptions:
+      - "Copying is biased toward success cues; deference is a cost paid for proximity; the model is evolutionary, not a dynamics on a network."
+    counterexample: Evidence that deference and copying do not track success cues once dominance is controlled.
+    formalization_delta: >
+      Relative to G1 and G2: the model is the source of borrowed behavior,
+      with prestige as the force, and the distance in prestige between learner
+      and model is a measurable variable, which gives G2 something to vary.
+      No account of the model becoming an obstacle, which is Girard's
+      addition. A pass never upgrades G1 or G2.
+    stands_in_for: G1
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O13
+    title: Moral condemnation as side-taking coordination (DeScioli and Kurzban)
+    priority: P1
+    milestone: M3-literature-map
+    kind: model
+    statement: >
+      Moral condemnation functions to let bystanders coordinate on the same
+      side of a dispute, so that the dispute does not split the group into a
+      costly fight. Side-taking by alliance (join the stronger party, or your
+      friends) produces escalating conflicts and despotism; side-taking by a
+      shared judgment of the act lets everyone converge against the party
+      judged wrong.
+    source:
+      - "DeScioli and Kurzban, 'A solution to the mysteries of morality', Psychological Bulletin 139(2) (2013) 477-496. Not opened; citation and page range from memory."
+    assumptions:
+      - "Bystanders bear a cost when they end on the losing side; a public rule about acts is available to all."
+    counterexample: Evidence that bystanders' side choices track alliances rather than public judgments of the act, in settings where both are observable.
+    formalization_delta: >
+      Relative to G4 and G5: a mechanism for all-against-one (coordination
+      to avoid the costs of a split) with its own prediction about the
+      victim: the party judged wrong under a shared rule, as against the
+      party with the weaker alliance. In the vault's record of the Hoover
+      interview (2009) Girard has neighbors joining the stronger side; that is
+      the alliance strategy this account says morality evolved to replace.
+      No objects, no borrowed desire. A rival to G5, not a reading of it. A
+      pass never upgrades G4 or G5.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O14
+    title: Coalitionary sanction and execution of upstarts (Boehm; Wrangham)
+    priority: P1
+    milestone: M3-literature-map
+    kind: empirical
+    statement: >
+      In the ethnographic record of mobile foragers, groups reverse dominance
+      by sanctioning upstarts, up to collective execution carried out by
+      consensus. Wrangham argues that selection against reactive aggression
+      through such executions shaped the species (the execution hypothesis).
+    source:
+      - "Boehm, Hierarchy in the Forest: The Evolution of Egalitarian Behavior (Harvard University Press, 1999). Not opened; from memory."
+      - "Boehm, Moral Origins: The Evolution of Virtue, Altruism, and Shame (Basic Books, 2012). Not opened; from memory."
+      - "Wrangham, The Goodness Paradox: The Strange Relationship Between Virtue and Violence in Human Evolution (Pantheon, 2019). Not opened; from memory."
+    assumptions:
+      - "Ethnographic cases are representative of the relevant past; execution by consensus is distinguishable from other killings in the record."
+    counterexample: Cases in the same record in which the executed party was not a dominant aggressor, in numbers that match or exceed the upstart cases.
+    formalization_delta: >
+      Relative to G5 and G6: all-against-one as a recurrent real event, with
+      a victim who is the dominant aggressor rather than arbitrary (against
+      G5's first clause), and with the group's judgment explicit rather than
+      misrecognized (against G6's rider that the mechanism works only while
+      misunderstood). A rival account, not a reading. No model here; this is
+      the empirical anchor for prediction P1 in eval/models/minimal-model-v0.md.
+    stands_in_for: G5
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O15
+    title: Preference falsification makes unanimity public and fragile (Kuran)
+    priority: P2
+    milestone: M3-literature-map
+    kind: model
+    statement: >
+      People misrepresent their private preferences under social pressure.
+      Public opinion is then a cascade over private thresholds, so apparent
+      unanimity can rest on little private agreement, and a small shift in a
+      few thresholds can reverse it suddenly.
+    source:
+      - "Kuran, Private Truths, Public Lies: The Social Consequences of Preference Falsification (Harvard University Press, 1995). Not opened; from memory."
+      - "Kuran, 'Sparks and prairie fires: a theory of unanticipated political revolution', Public Choice 61 (1989). Not opened; from memory."
+    assumptions:
+      - "Private preference and public statement are separate variables; the cost of dissent depends on how many already dissent."
+    counterexample: Evidence that public positions track private ones closely in a setting with strong social pressure.
+    formalization_delta: >
+      Relative to G4 and G6: G4's unanimity may be public conformity rather
+      than shared belief, and the vault's 'the mob is always innocent'
+      (Girard to Cayley, 2001) then has a mechanism in which the crowd need
+      not believe. No victim and no desire. A pass never upgrades a G claim.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O16
+    title: Mimetic contagion in markets (Orlean)
+    priority: P2
+    milestone: M3-literature-map
+    kind: model
+    statement: >
+      Under radical uncertainty, imitating other investors is rational, and
+      imitation generates self-referential price dynamics and bubbles;
+      shared conventions act as the mediator of value. Built explicitly on
+      Girard.
+    source:
+      - "Orlean, 'Mimetic contagion and speculative bubbles', Theory and Decision 27 (1989) 63-92. Not opened; citation and page range from memory."
+      - "Orlean, The Empire of Value: A New Foundation for Economics (MIT Press, 2014). Not opened; from memory."
+      - "Related, not Girardian: Banerjee, 'A simple model of herd behavior', Quarterly Journal of Economics 107(3) (1992); Bikhchandani, Hirshleifer, and Welch, 'A theory of fads, fashion, custom, and cultural change as informational cascades', Journal of Political Economy 100(5) (1992). Rational herding by Bayesian inference. Not opened; from memory."
+    assumptions:
+      - "Fundamental value is unknown; agents observe others' demand; imitation is a response to uncertainty, not a taste."
+    counterexample: A market model with the same uncertainty in which imitation does not produce self-referential dynamics, or price data without the predicted contagion signature.
+    formalization_delta: >
+      Relative to G1 and G4 in a market: desire for an asset borrowed from
+      others' demand, with convergence producing bubbles. No obstacle stage,
+      no victim, no aftermath. The lab's extension question (ROADMAP.md,
+      purpose) is whether Girard adds a prediction here beyond generic
+      herding: the model becoming the obstacle, and a culprit after the crash.
+      A pass never upgrades G1 or G4.
+    stands_in_for: G1
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O17
+    title: Herding produces crashes as critical points (Johansen, Ledoit, and Sornette)
+    priority: P2
+    milestone: M3-literature-map
+    kind: model
+    statement: >
+      In the Johansen, Ledoit, and Sornette model, traders imitating their
+      neighbors produce a growing hazard of crash, and prices before a crash
+      follow a log-periodic power law. The empirical fit is contested.
+    source:
+      - "Johansen, Ledoit, and Sornette, 'Crashes as critical points', International Journal of Theoretical and Applied Finance 3(2) (2000) 219-255. Not opened; citation and page range from memory."
+      - "Sornette, Why Stock Markets Crash: Critical Events in Complex Financial Systems (Princeton University Press, 2003). Not opened; from memory."
+    assumptions:
+      - "Imitation on a hierarchical network; rational traders anticipate the crash hazard; the price signature is the log-periodic power law."
+    counterexample: Out-of-sample crash predictions no better than chance, which critics have reported; verify when opened.
+    formalization_delta: >
+      Relative to G4: imitation among traders as the engine of a collective
+      event, with a quantitative signature. No victim and no aftermath. A
+      candidate bridge for the finance extension, not a reading of G4. A pass
+      never upgrades G4.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O18
+    title: Violence spreads by exposure like a contagion (Mohler and others; Slutkin)
+    priority: P2
+    milestone: M3-literature-map
+    kind: empirical
+    statement: >
+      Retaliatory violence clusters in time and space as a self-exciting
+      process, each event raising the short-run rate of further events nearby;
+      programs that treat violence as an epidemic and interrupt transmission
+      report reductions.
+    source:
+      - "Mohler, Short, Brantingham, Schoenberg, and Tita, 'Self-exciting point process modeling of crime', Journal of the American Statistical Association 106(493) (2011) 100-108. Not opened; citation and page range from memory."
+      - "Slutkin, 'Violence is a contagious disease', in Contagion of Violence: Workshop Summary (Institute of Medicine and National Research Council, 2013). Not opened; from memory."
+    assumptions:
+      - "Event data with time and place; a Hawkes-type model distinguishes self-excitation from a varying background rate."
+    counterexample: Event data in which clustering is fully explained by a varying background rate with no self-excitation.
+    formalization_delta: >
+      Relative to G4's first clause: direct empirical support that hostility
+      transmits from exposure. Nothing on convergence onto one victim or on
+      peace afterward. A pass never upgrades G4.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O19
+    title: "Online firestorms: bursts of hostility against one target (Pfeffer, Zorbach, and Carley)"
+    priority: P2
+    milestone: M3-literature-map
+    kind: empirical
+    statement: >
+      Large bursts of negative messages against one person or organization
+      arise within hours, spread through network propagation, and die out
+      within days.
+    source:
+      - "Pfeffer, Zorbach, and Carley, 'Understanding online firestorms: negative word-of-mouth dynamics in social media networks', Journal of Marketing Communications 20(1-2) (2014). Not opened; from memory."
+    assumptions:
+      - "Public, timestamped messages on a platform with observable ties."
+    counterexample: Firestorm data without network propagation (bursts explained by a common external shock alone).
+    formalization_delta: >
+      Relative to G4: a modern, timestamped all-against-one on a network, and
+      the candidate dataset for predictions P1 and P4 in
+      eval/models/minimal-model-v0.md. Whether the target is arbitrary,
+      dominant, or ally-poor is not settled by the source. A pass never
+      upgrades G4.
+    stands_in_for: G4
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O20
+    title: Empirical grounding claimed for mimetic theory (Garrels, ed.)
+    priority: P2
+    milestone: M3-literature-map
+    kind: textual
+    statement: >
+      The volume collects empirical work on imitation (infant imitation after
+      Meltzoff, mirror neuron research after Gallese, developmental studies)
+      as grounding for mimetic theory, and argues that imitation is
+      foundational in human development. It is the Girardian literature's own
+      attempt at the empirical step.
+    source:
+      - "Garrels (ed.), Mimesis and Science: Empirical Research on Imitation and the Mimetic Theory of Culture and Religion (Michigan State University Press, 2011). Not opened; from memory. The vault records Jonathan Bi mentioning infant imitation and mirror neurons as routes other Girardians use without resting on them (wiki/concepts/mimetic-desire)."
+    assumptions:
+      - "Individual-level imitation findings bear on G1; they do not reach G4 to G6 without a population model."
+    counterexample: Textual; the volume's chapters say less than the statement claims.
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: O21
+    title: Visible popularity raises inequality and unpredictability of success (Salganik, Dodds, and Watts)
+    priority: P2
+    milestone: M3-literature-map
+    kind: empirical
+    statement: >
+      In an artificial music market, letting participants see others'
+      download counts increased both the inequality and the unpredictability
+      of which songs succeeded, relative to a condition with no social
+      information; quality predicted success only partly.
+    source:
+      - "Salganik, Dodds, and Watts, 'Experimental study of inequality and unpredictability in an artificial cultural market', Science 311 (2006) 854-856. Not opened; citation and page range from memory."
+    assumptions:
+      - "Participants were randomized to independent and social-influence worlds; download counts were the only social signal."
+    counterexample: A replication in which the social-influence worlds show no more inequality or unpredictability than the independent world.
+    formalization_delta: >
+      Relative to G1: experimental evidence at population scale that desire
+      is moved by others' visible desire. No model, no rivalry, no victim.
+      This is what an empirical test of a mimetic claim looks like, which
+      M6 should copy in form. A pass never upgrades G1.
+    stands_in_for: G1
+    review_flags:
+      - "Drafted from Claude's memory on 2026-11-12 (ROADMAP.md, M3). No source opened by a person. The locator and the statement must be checked against the primary text before this claim is used as evidence."
+    status: locator-incomplete
+
+  - id: L1
+    title: Under strict majority, no count-based rule can start the snowball from an undifferentiated crisis
+    priority: P0
+    milestone: M4-minimal-model
+    kind: theorem
+    statement: >
+      In the minimal model's conformist hostility stage alone
+      (eval/models/minimal-model-v0.md, stage 4b, experiment E0), with no
+      self-targeting and keep own target on a tie: (a) from any
+      each-against-each start (every agent targets a distinct other agent),
+      the only agents that change at the first step under any deterministic
+      rule that depends only on the counts of neighbors' targets are leaves
+      whose neighbor's target is not themselves, so on a graph with minimum
+      degree 2 every such start is a fixed point (T2); (b) under strict
+      majority, a single-victim state is a fixed point if and only if no
+      agent other than the victim's own target has the victim as its only
+      neighbor (T1).
+    source:
+      - "T1 and T2 checked exhaustively on every connected graph with at most 7 vertices (networkx graph_atlas_g) with PR #30's majority_vertex_step and no self-targeting, 2026-11-12: T1 on 39,692 single-victim states, T2 on 1,612,125 derangement starts. Not proved. Measured consequence with the same code: from derangement starts, strict majority reaches a single-victim fixed point in 9 of 54 starts at n = 4, 44 of 924 at n = 5, and 265 of 29,680 at n = 6."
+    assumptions:
+      - "Single-victim state: some v such that every other agent targets v; v's own target is free."
+      - "Synchronous update; a rule that would select the agent itself keeps the current target."
+    counterexample: A derangement on a graph with minimum degree 2 that is not a fixed point of strict majority, or a single-victim state whose fixedness violates the T1 condition, on any finite graph.
+    formalization_delta: >
+      Relative to G4: targets only; no objects, no mediator, no decay, no
+      expulsion. The content is negative: under this reading of 'multiplies
+      with the number of those polarized' the snowball cannot begin from the
+      crisis Girard describes except at the periphery. Something else must
+      break the symmetry, and in the full model that is the mediator (stage
+      4a). A proof upgrades L1 only, never G4.
+    stands_in_for: G4
+    review_flags:
+      - "Lean target for issue #15. T2 is a symmetry argument and should be short; T1 is a case split on degree."
+    status: stated
+
+  - id: L2
+    title: Mediated hostility and conformist amplification are jointly needed for all-against-one (conjecture)
+    priority: P0
+    milestone: M4-minimal-model
+    kind: model
+    statement: >
+      In the full minimal model from the undifferentiated start (experiment
+      E2), with mediated transmission (stage 4a, lambda above 0) and
+      conformist amplification (H3 with gamma above 1), single-victim states
+      are reached in more than half of runs for N in {5, 10, 20} on
+      Watts-Strogatz graphs with Black's k and p, and in fewer than one tenth
+      of runs when either lambda is set to 0 or gamma is set to 1, at
+      parameter settings to be fixed before the run.
+    source:
+      - "Conjecture from T2 (L1): count-based rules cannot break the symmetry of a derangement, so a mediator term is the candidate symmetry breaker, and B2 reports that linear transmission (gamma = 1) never converges in Black's model. No run yet."
+    assumptions:
+      - "Stages 1 to 3 on (hostility is not seeded); decay delta above 0; SELF off; synchronous schedule."
+      - "The thresholds one half and one tenth are the pre-registered pass marks, chosen before any run."
+    counterexample: Runs in which single-victim states are common with lambda = 0, or with gamma = 1, or rare with both on, at the fixed settings.
+    formalization_delta: >
+      Relative to G4: G1's mediator (copy your model's antagonism) seeds the
+      snowball and G4's multiplication (gamma above 1) carries it; the claim
+      is that both are load-bearing. Hostility itself must arise from stage 3,
+      so G3 is an output here, not an input as in Black. Discrete targets, not
+      continuous hostility; Black's adaptive unanimity threshold is used so E1
+      can dock. A pass upgrades L2 only, never G1, G3, or G4.
+    stands_in_for: G4
+    depends_on:
+      - claim: G1
+        origin: girard
+        role: load-bearing
+        note: "Predicted load-bearing (lambda); to be tested by the lambda = 0 ablation."
+      - claim: G4
+        origin: girard
+        role: load-bearing
+        note: "Predicted load-bearing (gamma above 1); to be tested by the gamma = 1 ablation."
+      - assumption: adaptive-unanimity-threshold
+        origin: black-addition
+        role: setup
+      - assumption: discrete-targets
+        origin: modeling-convenience
+        role: setup
+    review_flags:
+      - "Status stays stated until E2 runs. Settings for lambda, gamma, alpha, eta, delta, tau, M, and seeds are recorded on this claim before the first run."
+    status: stated
+
   - id: W1
     title: Anti-mimesis converges on the rival (Wes, hypothesis)
     priority: P2
@@ -717,3 +1185,4 @@ changelog:
   - "2026-11-12 v0.2.3: O5, O6, O7 added for issue #14 readings of G4. O5 (majority period at most 2, on binary labels) is reported-by-source from the opened Goles-Ruz 2015 restatement of Goles-Olivos 1980; the statement is restricted to binary labels because the opened sources are binary or threshold, and the 1983 Poljak and Sůra PDF (the usual multi-opinion citation) was not opened. The 1980 and 1983 PDFs were not opened, so locators stay at article page ranges and no unread theorem numbers are used. O6 (majority can stay split) is stated, with three configurations checked by direct inspection, including a vertex-target example; the vertex-target example uses the majority rule on vertex-valued labels, stated in O6's assumptions, not as the O5 binary rule. O7 (voter-model unanimity) is reported-by-source from opened Aldous-Fill section 14.3 and Cooper et al. arXiv 1204.4106v3, with the schedule named; Donnelly-Welsh is recorded by bibliographic title and page range only. G4 formalization_delta gains Majority-O5-O6 and Voter-O7 keys. G4 status is unchanged. A pass never upgrades G4."
   - "2026-11-12 v0.2.4: Issue #16 assumption audit for Black claims. Every B claim (B1, B2, B3, B4) now classifies its assumptions as from Girard, Black's addition, or a modeling convenience, and has a depends_on list. G3's Black formalization_delta is tightened to the opened Appendix C.4 rule (rho * (1-alpha) * SharedDesire, rho = 0.2) and says plainly that G3 is never tested in any Black result (assumed as an input in object-rivalry runs; not used, and still not tested, in status-rivalry runs). The 'fixed 0.2 increment' wording was less precise than C.4. Load-bearing evidence cited here is Black's own opened Table 3 and Appendix D, still reported-by-source; independent labeled-extension reruns and formal counterexamples (issue #16 step 3) are not this PR. The scheme gains a depends_on field. O5, O6, and O7 are unchanged. G4 and G6 status are unchanged. A pass never upgrades a G. Paes (O1) and G5 are deferred, as the issue marks them lower priority."
   - "2026-11-12 v0.2.4 review: B4's G3 depends_on is scoped to the AC cells (RA does not rest on G3). B2's horizon is named horizon-600, matching Tables 1, 1b, and 2. B3's below-1 hostility note is classified as a model property, not a modeling convenience. The scheme defines load-bearing (removing it is reported to change the conclusion, with evidence) versus setup, and allows an optional note to scope an entry. B4's min-silence-500 is setup: it is constitutive of the scored predicate, not isolated by an ablation. A review flag on G3 records the open scarcity question (exogenous rivalrous objects versus 'does not depend on prior scarcity'); that question is not settled here. B2's formalization_delta now says 'all Black object-rivalry results,' matching the scoped G3 entry."
+  - "2026-11-12 v0.2.5: roadmap v0 (ROADMAP.md) and the minimal model spec v0 (eval/models/minimal-model-v0.md). New milestones M3-literature-map and M4-minimal-model, and the L prefix for the lab's own model claims. O8 to O21 are literature claims drafted from Claude's memory, every one locator-incomplete with a review flag saying so, none opened by a person; they map the threshold, cascade, complex contagion, conformist and prestige transmission, side-taking, coalitionary execution, preference falsification, market contagion, violence contagion, firestorm, Garrels, and MusicLab literatures onto G1, G4, and G5 with deltas. L1 (stated; T1 and T2 checked exhaustively to n = 7, not proved) and L2 (stated conjecture with pre-registered pass marks). O6's formalization_delta corrected: the unanimity test under no-self-targeting is the single-victim state, not ordinary agreement; the named examples are unchanged. G claims and their statuses are unchanged. A pass never upgrades a G claim."
