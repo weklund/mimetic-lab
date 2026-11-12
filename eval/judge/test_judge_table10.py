@@ -1203,6 +1203,174 @@ class Table10NPZ(unittest.TestCase):
         metadata_issues = [i for i in result["issues"] if i["code"] == "trial.metadata"]
         self.assertGreater(len(metadata_issues), 0, "Must have trial.metadata issues for missing arrays")
 
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    @patch_n_steps(8)
+    def test_npz_object_array_int64_passes(self):
+        """BLOCKER: Official export_v02.py NPZ layout (object array of 1-d np.int64) must PASS.
+        
+        export_v02.py writes nested ID series as: o = np.empty(len(v), dtype=object);
+        for i, row in enumerate(v): o[i] = np.asarray(row, dtype=np.int64).reshape(-1)
+        This yields object array where each element is a 1-d np.int64 array.
+        
+        Ragged case: alive 5 then 4 after a death, targets aligned and not self.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trial = trials[trial_id]
+        
+        # Build ragged series: 5 alive at step 0, 4 alive after step 3 (death at step 3)
+        # Steps 0-2: all 5 alive
+        # Step 3: agent 4 dies
+        # Steps 4-7: 4 alive (0,1,2,3)
+        series = trial["series"]
+        for t in range(8):
+            if t < 3:
+                series["alive_ids"][t] = [0, 1, 2, 3, 4]
+                series["n_alive"][t] = 5
+                series["eligible_ids"][t] = [0, 1, 2, 3, 4]
+                series["eligible_count"][t] = 5
+                # No self-targets: agent i -> (i+1) % 5
+                series["top_targets"][t] = [1, 2, 3, 4, 0]
+            else:
+                # Agent 4 died
+                series["alive_ids"][t] = [0, 1, 2, 3]
+                series["n_alive"][t] = 4
+                series["eligible_ids"][t] = [0, 1, 2, 3]
+                series["eligible_count"][t] = 4
+                # No self-targets: agent i -> (i+1) % 4
+                series["top_targets"][t] = [1, 2, 3, 0]
+        
+        # Create NPZ with official export_v02.py layout: object array of 1-d np.int64 arrays
+        npz_arrays = {}
+        for key, val in series.items():
+            if key in ("alive_ids", "eligible_ids", "top_targets"):
+                # Exact export_v02.py layout for nested ID series
+                o = np.empty(len(val), dtype=object)
+                for i, row in enumerate(val):
+                    o[i] = np.asarray(row, dtype=np.int64).reshape(-1)
+                npz_arrays[key] = o
+            elif key == "received_aggression":
+                # Same layout, but float64
+                o = np.empty(len(val), dtype=object)
+                for i, row in enumerate(val):
+                    o[i] = np.asarray(row, dtype=np.float64).reshape(-1)
+                npz_arrays[key] = o
+            elif key in ("t", "n_alive", "eligible_count"):
+                npz_arrays[key] = np.array(val, dtype=np.int64)
+            else:
+                npz_arrays[key] = np.array(val, dtype=np.float64)
+        
+        # Replace series with NPZ reference
+        trial["series"] = {"$npz": f"{trial_id}.npz"}
+        
+        npz_files = {f"{trial_id}.npz": npz_arrays}
+        result, code = self.run_judge(manifest, trials, npz_files)
+        
+        # Must PASS with ragged object array of int64
+        self.assertEqual(result["verdict"], "PASS")
+        
+        # Check cell verdict
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
+        self.assertEqual(cell["verdict"], "PASS")
+
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    @patch_n_steps(8)
+    def test_npz_object_array_self_target_fails(self):
+        """BLOCKER: Official NPZ layout with self-target must FAIL with ids.self_target.
+        
+        Same official export_v02.py layout, but with a self-target. Must FAIL with
+        ids.self_target, not only series.shape at step 0.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trial = trials[trial_id]
+        
+        # Build series with self-target at step 3: agent 1 targets itself
+        series = trial["series"]
+        series["alive_ids"][3] = [0, 1, 2]
+        series["n_alive"][3] = 3
+        series["eligible_ids"][3] = [0, 1, 2]
+        series["eligible_count"][3] = 3
+        series["top_targets"][3] = [2, 1, 0]  # agent 1 -> 1 (self-target)
+        
+        # Create NPZ with official export_v02.py layout
+        npz_arrays = {}
+        for key, val in series.items():
+            if key in ("alive_ids", "eligible_ids", "top_targets"):
+                o = np.empty(len(val), dtype=object)
+                for i, row in enumerate(val):
+                    o[i] = np.asarray(row, dtype=np.int64).reshape(-1)
+                npz_arrays[key] = o
+            elif key == "received_aggression":
+                o = np.empty(len(val), dtype=object)
+                for i, row in enumerate(val):
+                    o[i] = np.asarray(row, dtype=np.float64).reshape(-1)
+                npz_arrays[key] = o
+            elif key in ("t", "n_alive", "eligible_count"):
+                npz_arrays[key] = np.array(val, dtype=np.int64)
+            else:
+                npz_arrays[key] = np.array(val, dtype=np.float64)
+        
+        trial["series"] = {"$npz": f"{trial_id}.npz"}
+        
+        npz_files = {f"{trial_id}.npz": npz_arrays}
+        result, code = self.run_judge(manifest, trials, npz_files)
+        
+        # Must FAIL with ids.self_target
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"]
+                 if i["code"] == "trial.metadata" and "ids.self_target" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    @patch_n_steps(8)
+    def test_npz_uniform_object_array_passes(self):
+        """Should-fix: Uniform-length object array of 1-d int64 rows must PASS.
+        
+        Same as ragged test but all rows have length 5 (no deaths). Official layout.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trial = trials[trial_id]
+        
+        # All 8 steps: 5 alive, no self-targets
+        series = trial["series"]
+        for t in range(8):
+            series["alive_ids"][t] = [0, 1, 2, 3, 4]
+            series["n_alive"][t] = 5
+            series["eligible_ids"][t] = [0, 1, 2, 3, 4]
+            series["eligible_count"][t] = 5
+            series["top_targets"][t] = [1, 2, 3, 4, 0]  # No self-targets
+        
+        # Create NPZ with official export_v02.py layout
+        npz_arrays = {}
+        for key, val in series.items():
+            if key in ("alive_ids", "eligible_ids", "top_targets"):
+                o = np.empty(len(val), dtype=object)
+                for i, row in enumerate(val):
+                    o[i] = np.asarray(row, dtype=np.int64).reshape(-1)
+                npz_arrays[key] = o
+            elif key == "received_aggression":
+                o = np.empty(len(val), dtype=object)
+                for i, row in enumerate(val):
+                    o[i] = np.asarray(row, dtype=np.float64).reshape(-1)
+                npz_arrays[key] = o
+            elif key in ("t", "n_alive", "eligible_count"):
+                npz_arrays[key] = np.array(val, dtype=np.int64)
+            else:
+                npz_arrays[key] = np.array(val, dtype=np.float64)
+        
+        trial["series"] = {"$npz": f"{trial_id}.npz"}
+        
+        npz_files = {f"{trial_id}.npz": npz_arrays}
+        result, code = self.run_judge(manifest, trials, npz_files)
+        
+        # Must PASS
+        self.assertEqual(result["verdict"], "PASS")
+
 
 class Table10Aliases(unittest.TestCase):
     """Tests for contract alias support."""

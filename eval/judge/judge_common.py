@@ -164,8 +164,8 @@ def load_series(trial, trial_dir):
                 # Convert numpy arrays to lists
                 if arr.dtype == object:
                     # Object array of 1-d arrays (for nested series like alive_ids)
-                    series[key] = [list(x) if hasattr(x, '__iter__') and not isinstance(x, str) else x 
-                                   for x in arr]
+                    # Use .tolist() to convert numpy.int64 to Python int
+                    series[key] = [x.tolist() if hasattr(x, 'tolist') else x for x in arr]
                 else:
                     # Regular numeric array
                     series[key] = arr.tolist()
