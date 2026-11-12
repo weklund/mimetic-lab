@@ -16,7 +16,6 @@ from .graphs import (
     count_nonisomorphic_connected_graphs
 )
 from .majority import enumerate_binary_majority, enumerate_vertex_majority
-from .voter import analyze_absorbing_states
 
 
 def run_binary_enumeration_isomorphism_classes(max_n: int = 6) -> dict:
@@ -68,14 +67,15 @@ def run_binary_enumeration_isomorphism_classes(max_n: int = 6) -> dict:
     return results
 
 
-def run_vertex_enumeration_isomorphism_classes(max_n: int = 4) -> dict:
+def run_vertex_enumeration_isomorphism_classes(max_n: int = 6) -> dict:
     """
     Run vertex-valued majority enumeration (O6) on isomorphism classes.
     
-    Complete enumeration for n=1..4 (growth is n^n assignments per graph).
+    Complete enumeration for n=1..6 (growth is (n-1)^n no-self assignments per graph).
+    n=6: 112 classes x 5^6 = 1,750,000 configurations.
     
     Args:
-        max_n: Maximum number of nodes (kept at 4 due to n^n growth)
+        max_n: Maximum number of nodes
         
     Returns:
         Dictionary with results by n, including configuration counts
@@ -89,21 +89,23 @@ def run_vertex_enumeration_isomorphism_classes(max_n: int = 4) -> dict:
         graph_count = len(graphs)
         
         unanimous_fixed = 0
+        single_victim_fixed = 0
         split_fixed = 0
         period_2 = 0
         period_gt_2 = 0
         unknown = 0
-        configs_with_self_target = 0
+        initial_configs_with_self_target = 0
         total_configs = 0
         
         for G in graphs:
             result = enumerate_vertex_majority(G, allow_self_target=False)
             unanimous_fixed += result['unanimous_fixed']
+            single_victim_fixed += result['single_victim_fixed']
             split_fixed += result['split_fixed']
             period_2 += result['period_2']
             period_gt_2 += result['period_gt_2']
             unknown += result['unknown']
-            configs_with_self_target += result['configs_with_self_target_by_majority']
+            initial_configs_with_self_target += result['initial_configs_with_self_target_by_majority']
             total_configs += result['total_configs']
         
         print(f"  Completed {graph_count} isomorphism classes for n={n}", file=sys.stderr)
@@ -112,11 +114,12 @@ def run_vertex_enumeration_isomorphism_classes(max_n: int = 4) -> dict:
             'graph_count': graph_count,
             'total_configs': total_configs,
             'unanimous_fixed': unanimous_fixed,
+            'single_victim_fixed': single_victim_fixed,
             'split_fixed': split_fixed,
             'period_2': period_2,
             'period_gt_2': period_gt_2,
             'unknown': unknown,
-            'configs_with_self_target': configs_with_self_target
+            'initial_configs_with_self_target': initial_configs_with_self_target
         }
     
     return results
@@ -244,32 +247,35 @@ def generate_markdown_report(
     lines.append("")
     lines.append("### Enumeration Results for Vertex-Valued")
     lines.append("")
-    lines.append("| n | Graphs | Total Configs | Unanimous Fixed | Split Fixed | 2-Cycles | Period > 2 | Unknown |")
-    lines.append("|---|--------|---------------|-----------------|-------------|----------|------------|---------|")
+    lines.append("| n | Graphs | Total Configs | Unanimous | Single-Victim | Split | 2-Cycles | Period > 2 | Unknown |")
+    lines.append("|---|--------|---------------|-----------|---------------|-------|----------|------------|---------|")
     
     for n in sorted(vertex_results.keys()):
         r = vertex_results[n]
         lines.append(
             f"| {n} | {r['graph_count']} | {r['total_configs']} | "
-            f"{r['unanimous_fixed']} | {r['split_fixed']} | "
+            f"{r['unanimous_fixed']} | {r['single_victim_fixed']} | {r['split_fixed']} | "
             f"{r['period_2']} | {r['period_gt_2']} | {r['unknown']} |"
         )
     
     lines.append("")
+    lines.append("Single-victim fixed points: some vertex v such that every u != v targets v")
+    lines.append("(v's own target is free). The three named O6 configurations are split, not single-victim.")
+    lines.append("")
     lines.append("### Self-Target Cases")
     lines.append("")
-    lines.append("| n | Configs with Self-Target-by-Majority | Total Configs | Rate |")
-    lines.append("|---|--------------------------------------|---------------|------|")
+    lines.append("| n | Initial Configs with Self-Target-by-Majority | Total Configs | Rate |")
+    lines.append("|---|----------------------------------------------|---------------|------|")
     
     for n in sorted(vertex_results.keys()):
         r = vertex_results[n]
-        rate = r['configs_with_self_target'] / r['total_configs'] if r['total_configs'] > 0 else 0
+        rate = r['initial_configs_with_self_target'] / r['total_configs'] if r['total_configs'] > 0 else 0
         lines.append(
-            f"| {n} | {r['configs_with_self_target']} | {r['total_configs']} | {rate:.4f} |"
+            f"| {n} | {r['initial_configs_with_self_target']} | {r['total_configs']} | {rate:.4f} |"
         )
     
     lines.append("")
-    lines.append("**Note**: This is an exploration convention, not a sourced rule. Configurations")
+    lines.append("**Note**: This is an exploration convention, not a sourced rule. Initial configurations")
     lines.append("where a strict majority of an agent's neighbors target that agent. The enumeration")
     lines.append("keeps the agent's own target in such cases.")
     lines.append("")
@@ -280,10 +286,11 @@ def generate_markdown_report(
     lines.append("")
     lines.append("### Schedule Dependency")
     lines.append("")
-    lines.append("- **Continuous-time / lazy / asynchronous**: On a finite connected graph,")
-    lines.append("  the absorbing states are the unanimous states (all-0 and all-1).")
-    lines.append("- **Synchronous on bipartite graphs**: Not claimed to reach unanimity")
-    lines.append("  almost surely. The enumeration confirms this by simulation (see tests).")
+    lines.append("The test suite verifies a structural witness for schedule dependency:")
+    lines.append("")
+    lines.append("On C4 (4-cycle), under this PR's synchronous_voter_step, configuration (0,1,0,1)")
+    lines.append("maps to (1,0,1,0) and back. This is a 2-cycle, not absorbing, demonstrating that")
+    lines.append("synchronous voter on a bipartite graph does not always reach unanimity.")
     lines.append("")
     lines.append("### Graph Structure")
     lines.append("")
@@ -297,12 +304,6 @@ def generate_markdown_report(
             f"{r['non_bipartite_count']} |"
         )
     
-    lines.append("")
-    lines.append("The test suite verifies that:")
-    lines.append("")
-    lines.append("- Connected graphs have only unanimous absorbing states")
-    lines.append("- Synchronous voter on a bipartite graph (4-cycle) does not always absorb")
-    lines.append("- Lazy voter has positive absorption probability")
     lines.append("")
     lines.append("## Completeness")
     lines.append("")
@@ -318,7 +319,7 @@ def generate_markdown_report(
     lines.append("- n=6: 112 classes")
     lines.append("")
     lines.append("All isomorphism classes enumerated for n=1..6 with all 2^n binary assignments (O5)")
-    lines.append("and all valid vertex-target assignments for n=1..4 (O6).")
+    lines.append("and all no-self vertex-target assignments for n=1..6 (O6).")
     lines.append("")
     lines.append("## Conclusion")
     lines.append("")
@@ -339,7 +340,7 @@ def main():
     print("Starting enumeration (isomorphism classes)...", file=sys.stderr)
     
     binary_results = run_binary_enumeration_isomorphism_classes(max_n=6)
-    vertex_results = run_vertex_enumeration_isomorphism_classes(max_n=4)
+    vertex_results = run_vertex_enumeration_isomorphism_classes(max_n=6)
     voter_results = run_voter_analysis_isomorphism_classes(max_n=6)
     
     report = generate_markdown_report(binary_results, vertex_results, voter_results)

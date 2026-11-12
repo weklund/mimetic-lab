@@ -18,8 +18,6 @@ try:
         classify_trajectory
     )
     from .voter import (
-        analyze_absorbing_states,
-        test_schedule_dependency,
         is_absorbing_state,
         synchronous_voter_step
     )
@@ -37,8 +35,6 @@ except ImportError:
         classify_trajectory
     )
     from eval.enumeration.voter import (
-        analyze_absorbing_states,
-        test_schedule_dependency,
         is_absorbing_state,
         synchronous_voter_step
     )
@@ -91,6 +87,8 @@ class TestO6NamedConfigurations(unittest.TestCase):
     
     def test_o6_3_two_triangles_vertex_valued(self):
         """O6 config 3: Two triangles with vertex targets (5,5,5,0,0,0), no self-targeting."""
+        from eval.enumeration.majority import is_single_victim_state
+        
         G = nx.Graph()
         G.add_edges_from([
             (0, 1), (1, 2), (2, 0),
@@ -111,9 +109,11 @@ class TestO6NamedConfigurations(unittest.TestCase):
         )
         
         is_unanimous = all(s == initial[0] for s in next_state)
+        self.assertFalse(is_unanimous, "Fixed point should not be unanimous")
+        
         self.assertFalse(
-            is_unanimous, 
-            "Fixed point should not be unanimous (single-victim state)"
+            is_single_victim_state(initial),
+            "This configuration should not be a single-victim state (each faction targets the other)"
         )
 
 

@@ -72,28 +72,6 @@ def lazy_synchronous_voter_step(G: nx.Graph, opinions: Tuple[int, ...]) -> Tuple
     return tuple(new_opinions)
 
 
-def analyze_absorbing_states(G: nx.Graph) -> dict:
-    """
-    Analyze absorbing states for voter model on a connected graph.
-    
-    For continuous-time, lazy, or asynchronous voter on a connected graph,
-    the absorbing states are the unanimous states.
-    
-    Args:
-        G: Connected graph
-        
-    Returns:
-        Dictionary with absorbing state structure
-    """
-    n = G.number_of_nodes()
-    
-    return {
-        'n': n,
-        'connected': nx.is_connected(G),
-        'bipartite': nx.is_bipartite(G),
-        'absorbing_states': 2,
-        'description': 'All-0 and all-1 (unanimous states)'
-    }
 
 
 def simulate_voter_trajectory(

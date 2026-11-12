@@ -232,6 +232,31 @@ def enumerate_binary_majority(G: nx.Graph) -> dict:
     }
 
 
+def is_single_victim_state(targets: Tuple[int, ...]) -> bool:
+    """
+    Check if a state is a single-victim configuration.
+    
+    Definition: some vertex v such that every u != v targets v.
+    The victim v's own target is free (may or may not target itself).
+    
+    Args:
+        targets: Target assignment
+        
+    Returns:
+        True if this is a single-victim configuration
+    """
+    n = len(targets)
+    
+    for victim in range(n):
+        all_others_target_victim = all(
+            targets[u] == victim for u in range(n) if u != victim
+        )
+        if all_others_target_victim:
+            return True
+    
+    return False
+
+
 def enumerate_vertex_majority(
     G: nx.Graph,
     allow_self_target: bool = True
@@ -244,16 +269,17 @@ def enumerate_vertex_majority(
         allow_self_target: Whether to allow self-targeting in initial states
         
     Returns:
-        Dictionary with statistics including self-target-by-majority config counts
+        Dictionary with statistics including single-victim fixed points
     """
     n = G.number_of_nodes()
     
     unanimous_fixed = 0
+    single_victim_fixed = 0
     split_fixed = 0
     period_2 = 0
     period_gt_2 = 0
     unknown = 0
-    configs_with_self_target_by_majority = 0
+    initial_configs_with_self_target_by_majority = 0
     
     def generate_initial_states():
         """Generate all valid initial target assignments."""
@@ -298,7 +324,7 @@ def enumerate_vertex_majority(
         total += 1
         
         if check_self_target_by_majority(G, initial):
-            configs_with_self_target_by_majority += 1
+            initial_configs_with_self_target_by_majority += 1
         
         result = classify_trajectory(
             G, initial,
@@ -308,7 +334,11 @@ def enumerate_vertex_majority(
         if result['type'] == 'unanimous_fixed':
             unanimous_fixed += 1
         elif result['type'] == 'split_fixed':
-            split_fixed += 1
+            final_state = result['states'][0] if result['states'] else initial
+            if is_single_victim_state(final_state):
+                single_victim_fixed += 1
+            else:
+                split_fixed += 1
         elif result['type'] == 'cycle':
             if result['period'] == 2:
                 period_2 += 1
@@ -321,9 +351,10 @@ def enumerate_vertex_majority(
         'n': n,
         'total_configs': total,
         'unanimous_fixed': unanimous_fixed,
+        'single_victim_fixed': single_victim_fixed,
         'split_fixed': split_fixed,
         'period_2': period_2,
         'period_gt_2': period_gt_2,
         'unknown': unknown,
-        'configs_with_self_target_by_majority': configs_with_self_target_by_majority
+        'initial_configs_with_self_target_by_majority': initial_configs_with_self_target_by_majority
     }

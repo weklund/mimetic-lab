@@ -1,32 +1,3 @@
-Starting enumeration (isomorphism classes)...
-Enumerating binary majority (isomorphism classes) for n=1...
-  Completed 1 isomorphism classes for n=1
-Enumerating binary majority (isomorphism classes) for n=2...
-  Completed 1 isomorphism classes for n=2
-Enumerating binary majority (isomorphism classes) for n=3...
-  Completed 2 isomorphism classes for n=3
-Enumerating binary majority (isomorphism classes) for n=4...
-  Completed 6 isomorphism classes for n=4
-Enumerating binary majority (isomorphism classes) for n=5...
-  Completed 21 isomorphism classes for n=5
-Enumerating binary majority (isomorphism classes) for n=6...
-  Completed 112 isomorphism classes for n=6
-Enumerating vertex-valued majority (isomorphism classes) for n=1...
-  Completed 1 isomorphism classes for n=1
-Enumerating vertex-valued majority (isomorphism classes) for n=2...
-  Completed 1 isomorphism classes for n=2
-Enumerating vertex-valued majority (isomorphism classes) for n=3...
-  Completed 2 isomorphism classes for n=3
-Enumerating vertex-valued majority (isomorphism classes) for n=4...
-  Completed 6 isomorphism classes for n=4
-Analyzing voter model (isomorphism classes) for n=3...
-  Completed 2 isomorphism classes for n=3
-Analyzing voter model (isomorphism classes) for n=4...
-  Completed 6 isomorphism classes for n=4
-Analyzing voter model (isomorphism classes) for n=5...
-  Completed 21 isomorphism classes for n=5
-Analyzing voter model (isomorphism classes) for n=6...
-  Completed 112 isomorphism classes for n=6
 # Opinion Dynamics Enumeration Report
 
 Part of issue #14 item 2: exhaustive enumeration of small networks.
@@ -85,23 +56,30 @@ do not adopt the self-target (the agent keeps its own target).
 
 ### Enumeration Results for Vertex-Valued
 
-| n | Graphs | Total Configs | Unanimous Fixed | Split Fixed | 2-Cycles | Period > 2 | Unknown |
-|---|--------|---------------|-----------------|-------------|----------|------------|---------|
-| 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
-| 2 | 1 | 1 | 0 | 1 | 0 | 0 | 0 |
-| 3 | 2 | 16 | 0 | 16 | 0 | 0 | 0 |
-| 4 | 6 | 486 | 0 | 452 | 34 | 0 | 0 |
+| n | Graphs | Total Configs | Unanimous | Single-Victim | Split | 2-Cycles | Period > 2 | Unknown |
+|---|--------|---------------|-----------|---------------|-------|----------|------------|---------|
+| 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 2 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| 3 | 2 | 16 | 0 | 14 | 2 | 0 | 0 | 0 |
+| 4 | 6 | 486 | 0 | 281 | 171 | 34 | 0 | 0 |
+| 5 | 21 | 21504 | 0 | 8679 | 12175 | 650 | 0 | 0 |
+| 6 | 112 | 1750000 | 0 | 510239 | 1187461 | 52300 | 0 | 0 |
+
+Single-victim fixed points: some vertex v such that every u != v targets v
+(v's own target is free). The three named O6 configurations are split, not single-victim.
 
 ### Self-Target Cases
 
-| n | Configs with Self-Target-by-Majority | Total Configs | Rate |
-|---|--------------------------------------|---------------|------|
+| n | Initial Configs with Self-Target-by-Majority | Total Configs | Rate |
+|---|----------------------------------------------|---------------|------|
 | 1 | 0 | 0 | 0.0000 |
 | 2 | 1 | 1 | 1.0000 |
 | 3 | 14 | 16 | 0.8750 |
 | 4 | 352 | 486 | 0.7243 |
+| 5 | 11396 | 21504 | 0.5299 |
+| 6 | 748124 | 1750000 | 0.4275 |
 
-**Note**: This is an exploration convention, not a sourced rule. Configurations
+**Note**: This is an exploration convention, not a sourced rule. Initial configurations
 where a strict majority of an agent's neighbors target that agent. The enumeration
 keeps the agent's own target in such cases.
 
@@ -111,10 +89,11 @@ Claim: Almost-sure unanimity depends on the update schedule.
 
 ### Schedule Dependency
 
-- **Continuous-time / lazy / asynchronous**: On a finite connected graph,
-  the absorbing states are the unanimous states (all-0 and all-1).
-- **Synchronous on bipartite graphs**: Not claimed to reach unanimity
-  almost surely. The enumeration confirms this by simulation (see tests).
+The test suite verifies a structural witness for schedule dependency:
+
+On C4 (4-cycle), under this PR's synchronous_voter_step, configuration (0,1,0,1)
+maps to (1,0,1,0) and back. This is a 2-cycle, not absorbing, demonstrating that
+synchronous voter on a bipartite graph does not always reach unanimity.
 
 ### Graph Structure
 
@@ -124,12 +103,6 @@ Claim: Almost-sure unanimity depends on the update schedule.
 | 4 | 6 | 3 | 3 |
 | 5 | 21 | 5 | 16 |
 | 6 | 112 | 17 | 95 |
-
-The test suite verifies that:
-
-- Connected graphs have only unanimous absorbing states
-- Synchronous voter on a bipartite graph (4-cycle) does not always absorb
-- Lazy voter has positive absorption probability
 
 ## Completeness
 
@@ -145,7 +118,7 @@ Known nonisomorphic connected graph counts (verified in tests):
 - n=6: 112 classes
 
 All isomorphism classes enumerated for n=1..6 with all 2^n binary assignments (O5)
-and all valid vertex-target assignments for n=1..4 (O6).
+and all no-self vertex-target assignments for n=1..6 (O6).
 
 ## Conclusion
 
