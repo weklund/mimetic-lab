@@ -1,0 +1,34 @@
+name: Enumeration Tests
+
+on:
+  pull_request:
+    paths:
+      - 'eval/enumeration/**'
+      - '.github/workflows/enumeration-tests.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'eval/enumeration/**'
+      - '.github/workflows/enumeration-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Enumeration tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Install networkx
+        run: python -m pip install networkx
+
+      - name: Run enumeration tests
+        run: python -m unittest discover -s eval/enumeration -p 'test_*.py' -v
