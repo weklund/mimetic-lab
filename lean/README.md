@@ -30,8 +30,8 @@ If object self-links are not permitted, all nodes in a minimum MMS in equilibriu
 **Theorem 3 — Existence of Equilibrium without Narcissism** (Statement Only):
 If self-links are not permitted, equilibrium exists iff N can be partitioned into at least two disjoint MMSs. (Sack's sketch proves only the "only if" direction; full iff proof requires additional work.)
 
-**Theorem 4 — Existence of Equilibrium with Narcissism** (Complete Proof):
-If self-links are permitted, equilibrium always exists (all nodes can desire the same object).
+**Theorem 4 — Existence of Equilibrium with Narcissism** (**COMPLETE PROOF**):
+Given any mediation structure, there exists an object-of-desire assignment that satisfies equilibrium. Proven by constructing a constant obj function (all nodes desire the same object).
 
 **Theorem 5 — Number of Objects of Desire in Equilibrium** (Statement Only):
 The number of distinct objects of desire in equilibrium is bounded by the number of minimum MMSs in a partition.
@@ -74,7 +74,7 @@ lake build
 
 - **number_of_objects_bound** (Theorem 5): The counting argument is stated but not proven.
 
-**The main results (Theorems 1 and 2) are complete with rigorous proofs, no `sorry` statements.**
+**Theorems 1, 2, and 4 are complete with rigorous proofs, no `sorry` statements.**
 
 ## License
 

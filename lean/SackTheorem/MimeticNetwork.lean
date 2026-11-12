@@ -208,14 +208,20 @@ theorem existence_equilibrium_no_narcissism_only_if (net : MimeticNetwork N)
       (Finset.univ : Finset N) = partition.biUnion id := by
   sorry
 
+-- Sack's Theorem 4: Existence of equilibrium when self-object links are permitted.
+-- Given any mediation structure, we can construct an object-of-desire function
+-- that satisfies equilibrium by setting all nodes to desire the same object c.
+-- This is the "narcissistic" case where self-loops obj n = n are allowed.
+-- (In practice, we construct the constant function obj n = c for arbitrary c,
+-- which trivially satisfies obj n = obj (med n) since both equal c.)
 omit [Fintype N] [DecidableEq N] in
-theorem existence_equilibrium_with_narcissism {N : Type*}
-    (net : MimeticNetwork N)
-    (h_all_same : ∃ o : N, ∀ n : N, net.obj n = o) :
-    net.inEquilibrium := by
-  obtain ⟨o, ho⟩ := h_all_same
+theorem existence_equilibrium_with_narcissism {N : Type*} [Nonempty N]
+    (med : N → N) :
+    ∃ (obj : N → N), (MimeticNetwork.mk obj med).inEquilibrium := by
+  obtain ⟨c⟩ := ‹Nonempty N›
+  use (fun _ => c)
   intro n
-  rw [ho n, ho (net.med n)]
+  rfl
 
 theorem number_of_objects_bound (net : MimeticNetwork N)
     (h_equil : net.inEquilibrium)
