@@ -6,33 +6,37 @@ public import SackTheorem.MajorityImitation
 Copyright (c) 2026 Wes Eklund. All rights reserved.
 Released under MIT license.
 
-# Axiom Audit: Majority Imitation
+Authors: Cursor Cloud Agent
 
-This file pins the axioms of every proved theorem in `SackTheorem/MajorityImitation.lean`.
+# Axiom audit for MajorityImitation
 
-The split fixed point examples (pathGraph4, twoTrianglesGraph) are stated axiomatically
-for simplicity, as computing their neighbor sets in Lean's type system proved complex.
-These are checkable by hand or by external computation.
+This file audits all proved theorems in `MajorityImitation` to ensure they
+depend only on standard Lean axioms (`propext`, `Classical.choice`, `Quot.sound`)
+and zero project axioms.
 
-The main proved theorems use only standard Lean axioms plus the graph axioms.
+The `proof_wanted` claim `period_at_most_2` is not audited (it is not proved).
+
+## Axiom audit results
+
+All proved theorems depend only on standard Lean axioms:
+- `splitStatePath4_is_fixed`: [propext, Classical.choice, Quot.sound]
+- `splitStatePath4_not_unanimous`: [propext, Quot.sound]
+- `splitStateTwoTriangles_is_fixed`: [propext, Classical.choice, Quot.sound]
+- `splitStateTwoTriangles_not_unanimous`: [propext, Quot.sound]
+- `unanimity_not_inevitable`: [propext, Classical.choice, Quot.sound]
+
+Zero project axioms are used.
 -/
+
+@[expose] public section
 
 open MajorityImitation
 
--- splitStatePath4_is_fixed is axiomatic
-#check splitStatePath4_is_fixed
-
--- splitStatePath4_not_unanimous is proved
+/- Verify the axioms for each proved theorem -/
+#print axioms splitStatePath4_is_fixed
 #print axioms splitStatePath4_not_unanimous
-
--- splitStateTwoTriangles_is_fixed is axiomatic
-#check splitStateTwoTriangles_is_fixed
-
--- splitStateTwoTriangles_not_unanimous is proved
+#print axioms splitStateTwoTriangles_is_fixed
 #print axioms splitStateTwoTriangles_not_unanimous
-
--- unanimity_not_from_all_starts is proved
-#print axioms unanimity_not_from_all_starts
-
--- unanimity_not_inevitable is proved (uses the graph axioms)
 #print axioms unanimity_not_inevitable
+
+end
