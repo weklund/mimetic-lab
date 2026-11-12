@@ -322,10 +322,12 @@ def _nested_arrays_equal_exact(arr1, arr2):
 
 
 def check_id_integrity(series, trial_id, n_agents):
-    """Check per-step ID integrity: no duplicate alive_ids, eligible_ids must be subset of alive_ids.
+    """Check per-step ID integrity: full Table 2 ID checks per contract v0.2.2.
     
     Returns (valid, issues_list) where issues use trial.metadata code.
-    Uses same checks as judge_table2: ids.alive_duplicate, ids.eligible_not_alive.
+    Checks all Table 2 ID issues: ids.alive_count, ids.alive_duplicate, ids.alive_outside_population,
+    ids.eligible_count, ids.eligible_duplicate, ids.eligible_not_alive, ids.target_not_alive,
+    ids.self_target.
     """
     issues = []
     
@@ -334,41 +336,163 @@ def check_id_integrity(series, trial_id, n_agents):
     
     alive_ids = series.get("alive_ids", [])
     eligible_ids = series.get("eligible_ids", [])
+    top_targets = series.get("top_targets", [])
     n_alive = series.get("n_alive", [])
     eligible_count = series.get("eligible_count", [])
     
-    if not isinstance(alive_ids, list) or not isinstance(eligible_ids, list):
-        return True, []  # Skip check if arrays are not lists
+    # Non-list check: do not silently skip
+    if not isinstance(alive_ids, list):
+        issues.append({
+            "code": "trial.metadata",
+            "where": trial_id,
+            "detail": "alive_ids is not a list"
+        })
+        return False, issues
     
-    steps = min(len(alive_ids), len(eligible_ids), len(n_alive), len(eligible_count))
+    if not isinstance(eligible_ids, list):
+        issues.append({
+            "code": "trial.metadata",
+            "where": trial_id,
+            "detail": "eligible_ids is not a list"
+        })
+        return False, issues
+    
+    if not isinstance(top_targets, list):
+        issues.append({
+            "code": "trial.metadata",
+            "where": trial_id,
+            "detail": "top_targets is not a list"
+        })
+        return False, issues
+    
+    if not isinstance(n_alive, list):
+        issues.append({
+            "code": "trial.metadata",
+            "where": trial_id,
+            "detail": "n_alive is not a list"
+        })
+        return False, issues
+    
+    if not isinstance(eligible_count, list):
+        issues.append({
+            "code": "trial.metadata",
+            "where": trial_id,
+            "detail": "eligible_count is not a list"
+        })
+        return False, issues
+    
+    steps = min(len(alive_ids), len(eligible_ids), len(top_targets), len(n_alive), len(eligible_count))
+    population = set(range(n_agents))
     
     for t in range(steps):
-        if t >= len(alive_ids) or t >= len(eligible_ids):
+        if t >= len(alive_ids) or t >= len(eligible_ids) or t >= len(top_targets):
             continue
             
         alive = alive_ids[t]
         eligible = eligible_ids[t]
+        tt = top_targets[t]
         
-        if not isinstance(alive, list) or not isinstance(eligible, list):
-            continue
-        
-        # Check for duplicate alive_ids
-        if len(set(alive)) != len(alive):
+        if not isinstance(alive, list):
             issues.append({
                 "code": "trial.metadata",
                 "where": trial_id,
-                "detail": f"duplicate alive_ids at step {t}"
+                "detail": f"alive_ids[{t}] is not a list"
             })
-            break  # Report first occurrence
+            break
         
-        # Check eligible_ids are subset of alive_ids
-        if not set(eligible) <= set(alive):
+        if not isinstance(eligible, list):
             issues.append({
                 "code": "trial.metadata",
                 "where": trial_id,
-                "detail": f"eligible_ids not all in alive_ids at step {t}"
+                "detail": f"eligible_ids[{t}] is not a list"
             })
-            break  # Report first occurrence
+            break
+        
+        if not isinstance(tt, list):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"top_targets[{t}] is not a list"
+            })
+            break
+        
+        alive_set = set(alive)
+        
+        # ids.alive_count
+        if len(alive) != n_alive[t]:
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"ids.alive_count: len(alive_ids) != n_alive at step {t}"
+            })
+            break
+        
+        # ids.alive_duplicate
+        if len(alive_set) != len(alive):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"ids.alive_duplicate: duplicate alive_ids at step {t}"
+            })
+            break
+        
+        # ids.alive_outside_population
+        if not alive_set <= population:
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"ids.alive_outside_population: alive_ids outside 0..{n_agents-1} at step {t}"
+            })
+            break
+        
+        # ids.eligible_count
+        if len(eligible) != eligible_count[t]:
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"ids.eligible_count: len(eligible_ids) != eligible_count at step {t}"
+            })
+            break
+        
+        # ids.eligible_duplicate
+        if len(set(eligible)) != len(eligible):
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"ids.eligible_duplicate: duplicate eligible_ids at step {t}"
+            })
+            break
+        
+        # ids.eligible_not_alive
+        if not set(eligible) <= alive_set:
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"ids.eligible_not_alive: eligible_ids not all in alive_ids at step {t}"
+            })
+            break
+        
+        # ids.target_not_alive
+        if not set(tt) <= alive_set:
+            issues.append({
+                "code": "trial.metadata",
+                "where": trial_id,
+                "detail": f"ids.target_not_alive: top_targets not all in alive_ids at step {t}"
+            })
+            break
+        
+        # ids.self_target
+        if len(eligible) == len(tt):
+            for a, b in zip(eligible, tt, strict=True):
+                if a == b:
+                    issues.append({
+                        "code": "trial.metadata",
+                        "where": trial_id,
+                        "detail": f"ids.self_target: eligible agent targets itself at step {t}"
+                    })
+                    break
+            if issues:
+                break
     
     return len(issues) == 0, issues
 

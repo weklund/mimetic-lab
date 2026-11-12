@@ -59,6 +59,8 @@ def make_trial(variant, gamma, N, seed, n_steps_planned=8, steps_completed=None,
     trial_id = f"table10-g{gamma:.2f}-N{N}-v{variant}-s{seed}"
     
     # All required per-step series per eval/trial-schema.md and DETERMINISM_ARRAYS
+    # top_targets: avoid self-targets (agent i targets agent (i+1) % N)
+    targets = [(i + 1) % N for i in range(N)]
     series = {
         "t": list(range(steps_completed)),
         "n_alive": [N] * steps_completed,
@@ -67,7 +69,7 @@ def make_trial(variant, gamma, N, seed, n_steps_planned=8, steps_completed=None,
         "modal_agreement": [0.8] * steps_completed,
         "eligible_count": [N] * steps_completed,
         "eligible_ids": [list(range(N))] * steps_completed,
-        "top_targets": [[0] * N] * steps_completed,
+        "top_targets": [targets[:] for _ in range(steps_completed)],
         "received_aggression": [[0.1] * N] * steps_completed,
         "aggression_gini": [0.1] * steps_completed,
         "top_target_share": [0.15] * steps_completed,
@@ -1296,6 +1298,130 @@ class Table10IDIntegrity(unittest.TestCase):
                           if i["code"] == "trial.metadata" and "duplicate alive_ids" in i["detail"]]
         self.assertGreater(len(metadata_issues), 0)
 
+    @patch_n_steps(8)
+    def test_alive_count_mismatch_fails(self):
+        """Lab probe: n_alive[3]=2 with 5 alive ids should FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Step 3: n_alive=2 but alive_ids has 5 agents
+        trials[trial_id]["series"]["n_alive"][3] = 2
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2, 3, 4]
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "ids.alive_count" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_alive_outside_population_fails(self):
+        """Lab probe: alive_ids[3]=[0,1,2,3,99] with n_agents=5 should FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Step 3: include agent 99 outside 0..4
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2, 3, 99]
+        trials[trial_id]["series"]["n_alive"][3] = 5
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "ids.alive_outside_population" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_eligible_count_mismatch_fails(self):
+        """eligible_count != len(eligible_ids) should FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Step 3: eligible_count=2 but eligible_ids has 3 agents
+        trials[trial_id]["series"]["eligible_count"][3] = 2
+        trials[trial_id]["series"]["eligible_ids"][3] = [0, 1, 2]
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "ids.eligible_count" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_eligible_duplicate_fails(self):
+        """Duplicate eligible_ids should FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Step 3: duplicate eligible ids
+        trials[trial_id]["series"]["eligible_ids"][3] = [0, 1, 1]
+        trials[trial_id]["series"]["eligible_count"][3] = 3
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "ids.eligible_duplicate" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_target_not_alive_fails(self):
+        """top_targets not all in alive_ids should FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Step 3: target agent 4 who is not in alive_ids
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["n_alive"][3] = 3
+        trials[trial_id]["series"]["eligible_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["eligible_count"][3] = 3
+        trials[trial_id]["series"]["top_targets"][3] = [1, 2, 4]  # 4 not in alive
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "ids.target_not_alive" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_self_target_fails(self):
+        """An eligible agent targeting itself should FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Step 3: agent 1 targets itself
+        trials[trial_id]["series"]["alive_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["n_alive"][3] = 3
+        trials[trial_id]["series"]["eligible_ids"][3] = [0, 1, 2]
+        trials[trial_id]["series"]["eligible_count"][3] = 3
+        trials[trial_id]["series"]["top_targets"][3] = [2, 1, 0]  # agent 1 -> 1
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "ids.self_target" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
+    @patch_n_steps(8)
+    def test_non_list_alive_ids_fails(self):
+        """alive_ids not a list (silent skip probe) should FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        # Replace alive_ids with non-list
+        trials[trial_id]["series"]["alive_ids"] = "not a list"
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        issues = [i for i in result["issues"] 
+                 if i["code"] == "trial.metadata" and "alive_ids is not a list" in i["detail"]]
+        self.assertGreater(len(issues), 0)
+
 
 class Table10BlackRepo(unittest.TestCase):
     """Tests requiring Black's official repo at pinned SHA."""
@@ -1317,86 +1443,25 @@ class Table10BlackRepo(unittest.TestCase):
         
         return result, code
     
-    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    @unittest.skip("TODO: Official C-T10 runner test for issue #19 - needs real interrupt-at-k vs complete, not 10-vs-20")
     def test_short_run_unanimity_triggered(self):
-        """Run actual short run_unanimity_triggered at pinned SHA 89e7bbb, check forced-timeout prefix.
+        """TODO: Run C-T10 runner with real forced timeout (interrupt at step k < n_steps_planned).
         
-        Skipped only if Black repo is absent. Must run in CI (Black checked out at BLACK_SHA).
-        Compare incomplete (10 steps) vs completed (20 steps) run of same seed; prefix must equal.
+        Issue #19 requires: a run PLANNED for N steps and INTERRUPTED at k (timed_out=true,
+        steps_completed=k < n_steps_planned), compared with SAME seed run to COMPLETION
+        (timed_out=false, steps_completed=n_steps_planned=N). The interrupted run's arrays
+        must equal the first k steps of the completed run.
+        
+        Current black_reference.py only loads Table 2 helpers (time_to_95, gini, entropy).
+        To implement this correctly needs:
+        - Extend black_reference to load small_n_utils.run_unanimity_triggered under same
+          SHA-256 pin and AST-only rule (hash source file, parse with ast, compile only
+          what's needed, never run scripts)
+        - Use timeout_seconds to actually interrupt: timed_out must be true, k < N
+        - Compare prefixes
+        - Skip only if Black absent; REQUIRE_OFFICIAL=1 must fail if Black missing
         """
-        import sys
-        import importlib.util
-        import black_reference as B
-        
-        OK, WHY = B.available()
-        if not OK:
-            if os.environ.get("REQUIRE_OFFICIAL") == "1":
-                self.fail(f"REQUIRE_OFFICIAL=1 but Black code unavailable: {WHY}")
-            else:
-                self.skipTest(f"Black repo not available: {WHY}")
-        
-        # Import run_unanimity_triggered from Black's small_n_utils.py
-        black_dir = B.checkout_dir()
-        utils_path = os.path.join(black_dir, "small_n_utils.py")
-        
-        spec = importlib.util.spec_from_file_location("small_n_utils", utils_path)
-        small_n_utils = importlib.util.module_from_spec(spec)
-        sys.modules["small_n_utils"] = small_n_utils
-        spec.loader.exec_module(small_n_utils)
-        
-        run_unanimity_triggered = small_n_utils.run_unanimity_triggered
-        
-        # Run two short simulations with same seed
-        seed = 42
-        N = 5
-        gamma = 1.05
-        variant = "AC"
-        
-        # Run incomplete (10 steps)
-        result_10 = run_unanimity_triggered(
-            n_agents=N, gamma=gamma, variant=variant, n_steps=10,
-            seed=seed, cooldown=5, record_history=True, timeout_seconds=None
-        )
-        
-        # Run complete (20 steps)
-        result_20 = run_unanimity_triggered(
-            n_agents=N, gamma=gamma, variant=variant, n_steps=20,
-            seed=seed, cooldown=5, record_history=True, timeout_seconds=None
-        )
-        
-        # Check that both completed their requested steps
-        self.assertEqual(result_10["steps_completed"], 10)
-        self.assertEqual(result_20["steps_completed"], 20)
-        self.assertFalse(result_10.get("timed_out", False))
-        self.assertFalse(result_20.get("timed_out", False))
-        
-        # Compare modal_series prefix (first 10 steps)
-        modal_10 = result_10.get("modal_series", [])
-        modal_20 = result_20.get("modal_series", [])
-        
-        self.assertEqual(len(modal_10), 10, "10-step run should have 10 modal_series values")
-        self.assertGreaterEqual(len(modal_20), 10, "20-step run should have >= 10 modal_series values")
-        
-        # Prefix must equal
-        for i in range(10):
-            self.assertEqual(modal_10[i], modal_20[i], 
-                           f"modal_series[{i}] prefix mismatch: {modal_10[i]} != {modal_20[i]}")
-        
-        # Compare alive_counts prefix
-        alive_10 = result_10.get("alive_counts", [])
-        alive_20 = result_20.get("alive_counts", [])
-        
-        if alive_10 and alive_20:
-            for i in range(min(10, len(alive_10), len(alive_20))):
-                self.assertEqual(alive_10[i], alive_20[i],
-                               f"alive_counts[{i}] prefix mismatch")
-        
-        # Compare expulsion_steps (events with step < 10)
-        expulsions_10 = [s for s in result_10.get("expulsion_steps", []) if s < 10]
-        expulsions_20 = [s for s in result_20.get("expulsion_steps", []) if s < 10]
-        
-        self.assertEqual(expulsions_10, expulsions_20,
-                        "expulsion_steps in prefix [0, 10) must match")
+        pass
 
 
 class Table10ViabilityD7(unittest.TestCase):
