@@ -219,6 +219,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Black reference checkout for eval/judge tests
+eval/.cache/
 # Lean 4
 /.lake/
 /lake-packages/
