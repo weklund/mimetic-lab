@@ -22,10 +22,9 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
-
 from judge_common import (
-    check_v022_required_fields, is_trial_complete, check_determinism_prefix
+    check_v022_required_fields, is_trial_complete, check_determinism_prefix,
+    check_events_prefix
 )
 
 JUDGE_VERSION = "0.2.2"
@@ -59,11 +58,13 @@ PUB_TABLE10 = {
     ("RA", 2.00, 25): 80, ("RA", 2.00, 30): 95, ("RA", 2.00, 35): 90, ("RA", 2.00, 40): 65,
 }
 
-# Arrays to check for determinism (per-step arrays from the schema)
+# Arrays to check for determinism (all required per-step arrays from eval/trial-schema.md)
+# Contract names are used; modal_target_id is checked when present
 DETERMINISM_ARRAYS = [
-    "modal_agreement", "system_tension", "received_aggression",
-    "eligible_count", "eligible_ids", "top_targets", "alive_ids",
-    "n_alive", "aggression_gini", "t"
+    "t", "n_alive", "alive_ids", "system_tension", "modal_agreement",
+    "eligible_count", "eligible_ids", "top_targets", "received_aggression",
+    "aggression_gini", "top_target_share", "convergence_ratio", "aggression_entropy",
+    "top_R", "mean_R"
 ]
 
 # Every issue the judge can raise
@@ -331,9 +332,11 @@ def judge(trace_dir):
             continue
         
         cell_key = (variant, gamma, N)
+        # LM and RL are report-only, not claimed. Don't fail on their presence.
         if cell_key not in PUB_TABLE10:
-            issues.append(issue("ensemble.cells", f"cell {cell_key} not in published Table 10", stem))
-            continue
+            if variant not in ("LM", "RL"):
+                issues.append(issue("ensemble.cells", f"cell {cell_key} not in published Table 10", stem))
+            continue  # Skip LM/RL and invalid cells
         
         if cell_key not in cells:
             cells[cell_key] = CellResult(
@@ -405,13 +408,41 @@ def judge(trace_dir):
                 seed_trials[seed] = []
             seed_trials[seed].append((stem, tr))
         
+        # BLOCKER 2: Check that all 20 official seeds are present (plus at most one rerun each)
+        present_seeds = set(seed_trials.keys())
+        expected_seeds = set(SEEDS)
+        missing_seeds = expected_seeds - present_seeds
+        unexpected_seeds = present_seeds - expected_seeds
+        
+        if missing_seeds:
+            cell.issues.append(issue(
+                "ensemble.cells",
+                f"Cell {cell_key} missing seeds: {sorted(missing_seeds)}",
+                f"{cell_key}"
+            ))
+        if unexpected_seeds:
+            cell.issues.append(issue(
+                "ensemble.cells",
+                f"Cell {cell_key} has unexpected seeds: {sorted(unexpected_seeds)}",
+                f"{cell_key}"
+            ))
+        
         # Check each seed
         for seed, seed_trial_list in seed_trials.items():
             if len(seed_trial_list) == 1:
-                # Single trial for this seed - check if it's complete
+                # Single trial for this seed
                 stem, tr = seed_trial_list[0]
                 is_complete, reason = is_trial_complete(tr)
-                if not is_complete and tr.get("rerun_of") is None:
+                rerun_of = tr.get("rerun_of")
+                
+                # BLOCKER 3: A complete trial with rerun_of but no incomplete original is invalid
+                if rerun_of is not None:
+                    cell.issues.append(issue(
+                        "v022.rerun_invalid",
+                        f"trial {stem} has rerun_of={rerun_of!r} but no incomplete trial found for seed {seed}",
+                        stem
+                    ))
+                elif not is_complete:
                     # Incomplete, no rerun provided
                     pass  # Already tracked in n_incomplete
             else:
@@ -456,40 +487,78 @@ def judge(trace_dir):
                                 rerun_stem
                             ))
                         
-                        # Check determinism
+                        # Check determinism - arrays and events
                         rerun_is_complete, _ = is_trial_complete(rerun_tr)
+                        incomplete_steps = incomplete_tr.get("steps_completed", 0)
+                        
                         matches, mismatches = check_determinism_prefix(
-                            incomplete_tr, rerun_tr, DETERMINISM_ARRAYS
+                            incomplete_tr, rerun_tr, DETERMINISM_ARRAYS, tdir
                         )
-                        if not matches:
-                            cell.determinism_failures.append((seed, mismatches))
+                        events_match, event_mismatches = check_events_prefix(
+                            incomplete_tr, rerun_tr, incomplete_steps
+                        )
+                        
+                        all_mismatches = dict(mismatches)
+                        if not events_match:
+                            for event_type in event_mismatches:
+                                all_mismatches[event_type] = "event mismatch"
+                        
+                        if all_mismatches:
+                            cell.determinism_failures.append((seed, all_mismatches))
                             cell.issues.append(issue(
                                 "v022.determinism",
-                                f"seed {seed}: arrays {list(mismatches.keys())} do not match",
+                                f"seed {seed}: {list(all_mismatches.keys())} do not match",
                                 rerun_stem
                             ))
-                        elif rerun_is_complete and matches:
-                            # Successful rerun: remove this seed from incomplete list, update counts
+                            # BLOCKER 5: Failed prefix - don't count rerun in n_complete/n_viable
+                            # It was already counted, so decrement
+                            if rerun_is_complete:
+                                cell.n_complete -= 1
+                                # Check if it was counted as viable
+                                valid, _, is_gen = check_viability_d7(rerun_tr.get("viability"), rerun_stem)
+                                if valid and is_gen and seed in cell.viable_seeds:
+                                    cell.n_viable -= 1
+                                    cell.viable_seeds.remove(seed)
+                        elif rerun_is_complete and not all_mismatches:
+                            # Successful rerun: remove this seed from incomplete list
                             if seed in cell.incomplete_seeds:
                                 cell.incomplete_seeds.remove(seed)
                                 cell.n_incomplete -= 1
-                                # The rerun was already counted as complete, so no need to adjust n_complete
-                                # But we need to check if it's viable
-                                # (This was already done when we processed the rerun trial above)
+                                # Rerun was already counted as complete and viable above
     
-    # Overall verdict
+    # Overall verdict - BLOCKER 1: require all 48 published AC/RA cells
     all_issues = list(issues)
     for cell in cells.values():
         all_issues.extend(cell.issues)
+        # Raise v022.incomplete for each still-incomplete seed
+        for seed in cell.incomplete_seeds:
+            all_issues.append(issue(
+                "v022.incomplete",
+                f"Seed {seed} incomplete after allowed rerun",
+                f"{cell.variant}/g{cell.gamma}/N{cell.N}/s{seed}"
+            ))
+    
+    # Check that all 48 claimed cells are present
+    expected_cells = set(PUB_TABLE10.keys())
+    present_cells = set(cells.keys())
+    missing_cells = expected_cells - present_cells
+    
+    if missing_cells:
+        for cell_key in sorted(missing_cells):
+            all_issues.append(issue(
+                "ensemble.cells",
+                f"Required cell {cell_key} is missing from ensemble"
+            ))
     
     any_incomplete = any(c.n_incomplete > 0 for c in cells.values())
     all_pass = all(c.verdict() == "PASS" for c in cells.values())
+    all_cells_present = len(missing_cells) == 0
     
     # Critical issues that should cause FAIL even if there are incomplete trials
     critical_issue_codes = {"v022.multiple_reruns", "v022.rerun_invalid", "trial.metadata", "viability.d7"}
     has_critical_issues = any(i["code"] in critical_issue_codes for i in all_issues)
     
-    if has_critical_issues:
+    if has_critical_issues or not all_cells_present:
         verdict = "FAIL"
     elif any_incomplete:
         verdict = "INCOMPLETE"
@@ -509,10 +578,15 @@ def judge(trace_dir):
         "n_cells": len(cells),
         "n_trials": len(trials),
         "checks": {
+            "all_48_cells_present": all_cells_present,
             "any_cell_incomplete": any_incomplete,
             "all_cells_pass": all_pass,
             "no_issues": len(all_issues) == 0,
         },
+        "statement": (
+            "A C-T10 PASS is a judgment of Maxwell Black's model at pinned SHA "
+            f"{PINNED_SHA}. It upgrades claim B4 only, never G6 or Girard."
+        ),
         "cells": [c.to_dict() for c in sorted(cells.values(), key=lambda c: (c.variant, c.gamma, c.N))],
         "issues": all_issues,
         "trial_file_sha256": trial_sha256,

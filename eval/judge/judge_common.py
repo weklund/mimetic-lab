@@ -3,6 +3,13 @@
 Shared functions for handling incomplete trials, reruns, and determinism checks.
 """
 import math
+import os
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
 
 
 def _is_num(x):
@@ -112,20 +119,75 @@ def check_v022_required_fields(trial, issues_list, where=None):
     return all_ok
 
 
-def check_determinism_prefix(incomplete_trial, complete_trial, arrays_to_check):
+def load_series(trial, trial_dir):
+    """Load series from a trial, handling both inline JSON and NPZ offload.
+    
+    Per eval/trial-schema.md: series may be inline as {"array": [...]} or offloaded
+    as {"$npz": "<trial_id>.npz"}. NPZ uses object arrays of 1-d arrays for nested
+    series, with the same array names as inline JSON.
+    
+    Args:
+        trial: dict with 'series' field
+        trial_dir: directory containing the trial file and any NPZ
+    
+    Returns:
+        (series_dict, error_message) where series_dict has arrays as lists,
+        or (None, error_message) on error
+    """
+    series_field = trial.get("series")
+    if not isinstance(series_field, dict):
+        return None, "series is not a dict"
+    
+    # Check if it's NPZ offload
+    if "$npz" in series_field:
+        if not HAS_NUMPY:
+            return None, "series uses NPZ but numpy is not available"
+        
+        npz_name = series_field["$npz"]
+        if not isinstance(npz_name, str):
+            return None, f"$npz value is not a string: {npz_name!r}"
+        
+        npz_path = os.path.join(trial_dir, npz_name)
+        if not os.path.isfile(npz_path):
+            return None, f"NPZ file not found: {npz_name}"
+        
+        try:
+            npz_data = np.load(npz_path, allow_pickle=True)
+            series = {}
+            for key in npz_data.files:
+                arr = npz_data[key]
+                # Convert numpy arrays to lists
+                if arr.dtype == object:
+                    # Object array of 1-d arrays (for nested series like alive_ids)
+                    series[key] = [list(x) if hasattr(x, '__iter__') and not isinstance(x, str) else x 
+                                   for x in arr]
+                else:
+                    # Regular numeric array
+                    series[key] = arr.tolist()
+            npz_data.close()
+            return series, None
+        except Exception as exc:
+            return None, f"Failed to load NPZ {npz_name}: {exc}"
+    else:
+        # Inline series
+        return series_field, None
+
+
+def check_determinism_prefix(incomplete_trial, complete_trial, arrays_to_check, trial_dir):
     """Check that incomplete trial's arrays match the prefix of complete trial's arrays.
     
     Per contract v0.2.2: the incomplete run's per-step arrays must equal the first 
-    steps_completed steps of the completed rerun.
+    steps_completed steps of the completed rerun. Uses exact equality.
     
     Args:
         incomplete_trial: dict with 'series' and 'steps_completed'
         complete_trial: dict with 'series' and 'steps_completed'
-        arrays_to_check: list of array names to check (e.g., ['modal_agreement', 'system_tension'])
+        arrays_to_check: list of required array names (from schema)
+        trial_dir: directory containing trial files and NPZ files
     
     Returns:
         (matches, mismatches) where:
-        - matches is True if all arrays match
+        - matches is True if all arrays match exactly
         - mismatches is a dict of {array_name: details} for arrays that don't match
     """
     incomplete_steps = incomplete_trial.get("steps_completed")
@@ -137,23 +199,34 @@ def check_determinism_prefix(incomplete_trial, complete_trial, arrays_to_check):
     if incomplete_steps > complete_steps:
         return False, {"error": f"incomplete has more steps ({incomplete_steps}) than complete ({complete_steps})"}
     
-    incomplete_series = incomplete_trial.get("series", {})
-    complete_series = complete_trial.get("series", {})
+    # Load series (handles both inline and NPZ)
+    incomplete_series, inc_err = load_series(incomplete_trial, trial_dir)
+    if inc_err:
+        return False, {"error": f"incomplete trial: {inc_err}"}
     
-    if not isinstance(incomplete_series, dict) or not isinstance(complete_series, dict):
-        return False, {"error": "series is not a dict"}
+    complete_series, comp_err = load_series(complete_trial, trial_dir)
+    if comp_err:
+        return False, {"error": f"complete trial: {comp_err}"}
     
     mismatches = {}
     
-    for array_name in arrays_to_check:
+    # Check all required arrays plus any optional ones both sides have
+    all_arrays = set(arrays_to_check)
+    for key in incomplete_series:
+        if key in complete_series:
+            all_arrays.add(key)
+    
+    for array_name in all_arrays:
         inc_array = incomplete_series.get(array_name)
         comp_array = complete_series.get(array_name)
         
         if inc_array is None:
-            mismatches[array_name] = "missing in incomplete trial"
+            if array_name in arrays_to_check:
+                mismatches[array_name] = "missing in incomplete trial"
             continue
         if comp_array is None:
-            mismatches[array_name] = "missing in complete trial"
+            if array_name in arrays_to_check:
+                mismatches[array_name] = "missing in complete trial"
             continue
         
         if not isinstance(inc_array, list) or not isinstance(comp_array, list):
@@ -168,35 +241,29 @@ def check_determinism_prefix(incomplete_trial, complete_trial, arrays_to_check):
             mismatches[array_name] = f"complete array length {len(comp_array)} != steps_completed {complete_steps}"
             continue
         
-        # Compare the prefix
+        # Compare the prefix - use exact equality per contract "must equal"
         prefix = comp_array[:incomplete_steps]
         
         # For nested arrays (lists of lists), need element-by-element comparison
         if incomplete_steps > 0 and isinstance(inc_array[0], list):
-            if not _nested_arrays_equal(inc_array, prefix):
+            if not _nested_arrays_equal_exact(inc_array, prefix):
                 mismatches[array_name] = f"nested array mismatch in first {incomplete_steps} steps"
         else:
-            # For simple arrays, check with tolerance for floats
-            if not _arrays_equal(inc_array, prefix):
+            # For simple arrays, use exact equality
+            if not _arrays_equal_exact(inc_array, prefix):
                 mismatches[array_name] = f"mismatch in first {incomplete_steps} steps"
     
     return len(mismatches) == 0, mismatches
 
 
-def _arrays_equal(arr1, arr2, tol=1e-12):
-    """Compare two arrays element-by-element with tolerance for floats."""
+def _arrays_equal_exact(arr1, arr2):
+    """Compare two arrays element-by-element with exact equality."""
     if len(arr1) != len(arr2):
         return False
     
     for a, b in zip(arr1, arr2, strict=True):
-        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-            if not math.isfinite(a) or not math.isfinite(b):
-                if a != b:  # NaN != NaN, inf == inf
-                    return False
-            elif abs(a - b) > tol:
-                return False
-        elif isinstance(a, list) and isinstance(b, list):
-            if not _arrays_equal(a, b, tol):
+        if isinstance(a, list) and isinstance(b, list):
+            if not _arrays_equal_exact(a, b):
                 return False
         else:
             if a != b:
@@ -205,8 +272,8 @@ def _arrays_equal(arr1, arr2, tol=1e-12):
     return True
 
 
-def _nested_arrays_equal(arr1, arr2, tol=1e-12):
-    """Compare two nested arrays (list of lists) element-by-element."""
+def _nested_arrays_equal_exact(arr1, arr2):
+    """Compare two nested arrays (list of lists) element-by-element with exact equality."""
     if len(arr1) != len(arr2):
         return False
     
@@ -214,7 +281,56 @@ def _nested_arrays_equal(arr1, arr2, tol=1e-12):
         if not isinstance(sub1, list) or not isinstance(sub2, list):
             if sub1 != sub2:
                 return False
-        elif not _arrays_equal(sub1, sub2, tol):
+        elif not _arrays_equal_exact(sub1, sub2):
             return False
     
     return True
+
+
+def check_events_prefix(incomplete_trial, complete_trial, incomplete_steps):
+    """Check that events in the incomplete prefix match between incomplete and complete trials.
+    
+    Events whose step < steps_completed must match exactly. Checks expulsion_events,
+    catharsis_events, and viability.expulsion_steps.
+    
+    Returns:
+        (matches, mismatches) where mismatches lists event types that don't match
+    """
+    mismatches = []
+    
+    # Check expulsion_events
+    inc_expulsions = incomplete_trial.get("expulsion_events", [])
+    comp_expulsions = complete_trial.get("expulsion_events", [])
+    
+    inc_prefix_expulsions = [e for e in inc_expulsions if e.get("step", -1) < incomplete_steps]
+    comp_prefix_expulsions = [e for e in comp_expulsions if e.get("step", -1) < incomplete_steps]
+    
+    if inc_prefix_expulsions != comp_prefix_expulsions:
+        mismatches.append("expulsion_events")
+    
+    # Check catharsis_events
+    inc_catharsis = incomplete_trial.get("catharsis_events", [])
+    comp_catharsis = complete_trial.get("catharsis_events", [])
+    
+    inc_prefix_catharsis = [e for e in inc_catharsis if e.get("step", -1) < incomplete_steps]
+    comp_prefix_catharsis = [e for e in comp_catharsis if e.get("step", -1) < incomplete_steps]
+    
+    if inc_prefix_catharsis != comp_prefix_catharsis:
+        mismatches.append("catharsis_events")
+    
+    # Check viability.expulsion_steps
+    inc_viab = incomplete_trial.get("viability", {})
+    comp_viab = complete_trial.get("viability", {})
+    
+    if isinstance(inc_viab, dict) and isinstance(comp_viab, dict):
+        inc_exp_steps = inc_viab.get("expulsion_steps", [])
+        comp_exp_steps = comp_viab.get("expulsion_steps", [])
+        
+        if isinstance(inc_exp_steps, list) and isinstance(comp_exp_steps, list):
+            inc_prefix_steps = [s for s in inc_exp_steps if s < incomplete_steps]
+            comp_prefix_steps = [s for s in comp_exp_steps if s < incomplete_steps]
+            
+            if inc_prefix_steps != comp_prefix_steps:
+                mismatches.append("viability.expulsion_steps")
+    
+    return len(mismatches) == 0, mismatches
