@@ -147,11 +147,16 @@ def load_series(trial, trial_dir):
         if not isinstance(npz_name, str):
             return None, f"$npz value is not a string: {npz_name!r}"
         
+        # Restrict to bare filename in trials/ (no path traversal)
+        if "/" in npz_name or "\\" in npz_name or npz_name.startswith("."):
+            return None, f"$npz must be a bare filename, not a path: {npz_name!r}"
+        
         npz_path = os.path.join(trial_dir, npz_name)
         if not os.path.isfile(npz_path):
             return None, f"NPZ file not found: {npz_name}"
         
         try:
+            # Object arrays require allow_pickle, but path is restricted to trial_dir
             npz_data = np.load(npz_path, allow_pickle=True)
             series = {}
             for key in npz_data.files:

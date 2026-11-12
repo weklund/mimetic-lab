@@ -171,7 +171,7 @@ def check_viability_d7(viability, trial_id):
     return True, [], d7_holds
 
 
-def check_trial_metadata(tr, stem, expect_variant, expect_gamma, expect_n):
+def check_trial_metadata(tr, stem, expect_variant, expect_gamma, expect_n, trial_dir=None):
     """Check trial metadata for C-T10."""
     issues = []
     
@@ -201,12 +201,8 @@ def check_trial_metadata(tr, stem, expect_variant, expect_gamma, expect_n):
         issues.append(issue("trial.metadata", f"script {tr.get('script')!r} != exp_small_n_viability.py", stem))
     if tr.get("expulsion_mode") != "unanimity_adaptive":
         issues.append(issue("trial.metadata", f"expulsion_mode {tr.get('expulsion_mode')!r} != unanimity_adaptive", stem))
-    
-    # n_steps_planned should be N_STEPS for official trials, but allow test fixtures with different values
-    # as long as completeness is still valid (steps_completed == n_steps_planned for complete trials)
-    n_steps_planned = tr.get("n_steps_planned")
-    if not _is_int(n_steps_planned) or n_steps_planned <= 0:
-        issues.append(issue("trial.metadata", f"n_steps_planned {n_steps_planned!r} must be a positive integer", stem))
+    if tr.get("n_steps_planned") != N_STEPS:
+        issues.append(issue("trial.metadata", f"n_steps_planned {tr.get('n_steps_planned')!r} != {N_STEPS}", stem))
     
     if tr.get("variant") != expect_variant:
         issues.append(issue("trial.metadata", f"variant {tr.get('variant')!r} != {expect_variant}", stem))
@@ -219,21 +215,39 @@ def check_trial_metadata(tr, stem, expect_variant, expect_gamma, expect_n):
     if not _is_int(seed) or seed not in SEEDS:
         issues.append(issue("trial.metadata", f"seed {seed!r} not in official seeds", stem))
     
-    # Check required series arrays
+    # Check required series arrays (both inline and NPZ) - presence and length
     series = tr.get("series")
     if not isinstance(series, dict):
         issues.append(issue("trial.metadata", "series is not a dict", stem))
-    else:
-        # Check for NPZ offload or inline
-        if "$npz" not in series:
-            # Inline series - check required arrays (allowing aliases)
-            from judge_common import _resolve_alias
-            for array_name in DETERMINISM_ARRAYS:
-                if array_name == "modal_target_id":
-                    continue  # Optional
-                resolved = _resolve_alias(array_name, series)
-                if resolved is None:
-                    issues.append(issue("trial.metadata", f"required series array {array_name!r} missing (checked aliases too)", stem))
+    elif trial_dir:
+        from judge_common import _resolve_alias, load_series
+        
+        # Load series (handles both inline and NPZ)
+        loaded_series, load_err = load_series(tr, trial_dir)
+        if load_err:
+            # Unreadable or missing NPZ is FAIL, not skipped
+            issues.append(issue("trial.metadata", f"cannot load series: {load_err}", stem))
+        elif loaded_series:
+            steps_completed = tr.get("steps_completed")
+            if not _is_int(steps_completed):
+                issues.append(issue("trial.metadata", "steps_completed is not an integer", stem))
+            else:
+                # Check required arrays: presence and length (allowing aliases)
+                for array_name in DETERMINISM_ARRAYS:
+                    if array_name == "modal_target_id":
+                        continue  # Optional
+                    resolved = _resolve_alias(array_name, loaded_series)
+                    if resolved is None:
+                        issues.append(issue("trial.metadata", f"required series array {array_name!r} missing (checked aliases too)", stem))
+                    else:
+                        # Check length matches steps_completed
+                        array = loaded_series[resolved]
+                        if not isinstance(array, list):
+                            issues.append(issue("trial.metadata", f"series array {array_name!r} is not a list", stem))
+                        elif len(array) != steps_completed:
+                            issues.append(issue("trial.metadata", 
+                                f"series array {array_name!r} length {len(array)} != steps_completed {steps_completed}", 
+                                stem))
     
     return issues
 
@@ -266,9 +280,9 @@ class CellResult:
     
     def verdict(self) -> str:
         """Return PASS, FAIL, or INCOMPLETE."""
-        # Check for critical issues first
-        critical_codes = {"v022.multiple_reruns", "v022.rerun_invalid", "ensemble.cells", "viability.d7"}
-        has_critical = any(i["code"] in critical_codes for i in self.issues)
+        # Critical issues: any issue except v022.incomplete and v022.determinism is fatal
+        non_critical_codes = {"v022.incomplete", "v022.determinism"}
+        has_critical = any(i["code"] not in non_critical_codes for i in self.issues)
         
         if has_critical:
             return "FAIL"
@@ -349,6 +363,7 @@ def judge(trace_dir):
     cells = {}
     trials = {}
     trial_sha256 = {}
+    report_only_trials = []  # LM and RL trials (report-only, not claimed)
     
     for fname in files:
         stem = fname[:-5]
@@ -378,9 +393,18 @@ def judge(trace_dir):
         cell_key = (variant, gamma, N)
         # LM and RL are report-only, not claimed. Don't fail on their presence.
         if cell_key not in PUB_TABLE10:
-            if variant not in ("LM", "RL"):
+            if variant in ("LM", "RL"):
+                # Report-only: record but don't process
+                report_only_trials.append({
+                    "trial_id": stem,
+                    "variant": variant,
+                    "gamma": gamma,
+                    "N": N,
+                    "seed": seed,
+                })
+            else:
                 issues.append(issue("ensemble.cells", f"cell {cell_key} not in published Table 10", stem))
-            continue  # Skip LM/RL and invalid cells
+            continue  # Skip LM/RL and invalid cells from processing
         
         if cell_key not in cells:
             cells[cell_key] = CellResult(
@@ -402,7 +426,7 @@ def judge(trace_dir):
             continue  # Already reported as invalid cell
         
         cell = cells[cell_key]
-        cell.issues.extend(check_trial_metadata(tr, stem, variant, gamma, N))
+        cell.issues.extend(check_trial_metadata(tr, stem, variant, gamma, N, tdir))
         
         # Check viability
         viability = tr.get("viability")
@@ -450,16 +474,14 @@ def judge(trace_dir):
             originals = [(stem, tr) for stem, tr in seed_trial_list if tr.get("rerun_of") is None]
             labeled_reruns = [(stem, tr) for stem, tr in seed_trial_list if tr.get("rerun_of") is not None]
             
-            # Seed structure validation
+            # Seed structure validation: ANY seed with more than one rerun_of=null trial is invalid
+            # (regardless of completeness - this includes incomplete original + unlabeled complete second run)
             if len(originals) > 1:
-                # Multiple complete originals is a structural defect
-                complete_originals = [(stem, tr) for stem, tr in originals if is_trial_complete(tr)[0]]
-                if len(complete_originals) > 1:
-                    cell.issues.append(issue(
-                        "ensemble.cells",
-                        f"Seed {seed} has {len(complete_originals)} complete original trials (rerun_of=null); max 1 allowed",
-                        f"{cell_key}-seed{seed}"
-                    ))
+                cell.issues.append(issue(
+                    "ensemble.cells",
+                    f"Seed {seed} has {len(originals)} trials with rerun_of=null; max 1 allowed",
+                    f"{cell_key}-seed{seed}"
+                ))
             
             if len(labeled_reruns) > 1:
                 cell.issues.append(issue(
@@ -596,9 +618,10 @@ def judge(trace_dir):
     all_pass = all(c.verdict() == "PASS" for c in cells.values())
     all_cells_present = len(missing_cells) == 0
     
-    # Critical issues that should cause FAIL even if there are incomplete trials
-    critical_issue_codes = {"v022.multiple_reruns", "v022.rerun_invalid", "trial.metadata", "viability.d7", "ensemble.cells"}
-    has_critical_issues = any(i["code"] in critical_issue_codes for i in all_issues)
+    # Critical issues: any issue except v022.incomplete and v022.determinism is fatal
+    # A rerun cannot fix structural/manifest issues, so they must cause FAIL
+    non_critical_codes = {"v022.incomplete", "v022.determinism"}
+    has_critical_issues = any(i["code"] not in non_critical_codes for i in all_issues)
     
     if has_critical_issues or not all_cells_present:
         verdict = "FAIL"
@@ -619,6 +642,7 @@ def judge(trace_dir):
         "verdict": verdict,
         "n_cells": len(cells),
         "n_trials": len(trials),
+        "n_report_only": len(report_only_trials),
         "checks": {
             "all_48_cells_present": all_cells_present,
             "any_cell_incomplete": any_incomplete,
@@ -630,6 +654,7 @@ def judge(trace_dir):
             f"{PINNED_SHA}. It upgrades claim B4 only, never G6 or Girard."
         ),
         "cells": [c.to_dict() for c in sorted(cells.values(), key=lambda c: (c.variant, c.gamma, c.N))],
+        "report_only": report_only_trials,
         "issues": all_issues,
         "trial_file_sha256": trial_sha256,
     }

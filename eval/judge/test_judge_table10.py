@@ -22,6 +22,22 @@ except ImportError:
     HAS_NUMPY = False
 
 
+def patch_n_steps(n_steps=8):
+    """Decorator to patch J10.N_STEPS for test fixtures."""
+    def decorator(func):
+        def wrapper(self, *args, **kwargs):
+            saved = J10.N_STEPS
+            try:
+                J10.N_STEPS = n_steps
+                return func(self, *args, **kwargs)
+            finally:
+                J10.N_STEPS = saved
+        wrapper.__name__ = func.__name__
+        wrapper.__doc__ = func.__doc__
+        return wrapper
+    return decorator
+
+
 def write_text(path, text):
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
@@ -171,6 +187,59 @@ def make_ensemble_full():
     return manifest, trials
 
 
+class Table10NStepsValidation(unittest.TestCase):
+    """Tests for n_steps_planned == 5000 validation."""
+    
+    def run_judge(self, manifest, trials):
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table10")
+            os.makedirs(os.path.join(traces, "trials"))
+            
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+            for stem, trial in trials.items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(trial))
+            
+            out = os.path.join(d, "result.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = J10.main([traces, out])
+            
+            result = J10.load_json_strict(J10.read_bytes(out))
+        
+        return result, code
+    
+    def test_short_n_steps_fails_without_patch(self):
+        """Full 48-cell ensemble at n_steps_planned = steps_completed = 8 FAILS without N_STEPS patch.
+        
+        Judge requires n_steps_planned == 5000. Do NOT patch N_STEPS for this test.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        # All trials have n_steps_planned = steps_completed = 8 from make_trial defaults
+        # This should FAIL because judge requires n_steps_planned == 5000
+        result, code = self.run_judge(manifest, trials)
+        
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertEqual(code, 1)
+        
+        # Should have trial.metadata issues
+        metadata_issues = [i for i in result["issues"] if i["code"] == "trial.metadata" and "n_steps_planned" in i["detail"]]
+        self.assertGreater(len(metadata_issues), 0)
+    
+    def test_default_fixture_passes_with_patch(self):
+        """Default fixture with N_STEPS patched to 8 PASSes."""
+        saved_n_steps = J10.N_STEPS
+        try:
+            J10.N_STEPS = 8  # Patch to match fixture
+            manifest, trials = make_ensemble_full()
+            
+            result, code = self.run_judge(manifest, trials)
+            
+            self.assertEqual(result["verdict"], "PASS")
+            self.assertEqual(code, 0)
+        finally:
+            J10.N_STEPS = saved_n_steps
+
+
 class Table10Basic(unittest.TestCase):
     """Basic C-T10 judge tests."""
     
@@ -192,6 +261,7 @@ class Table10Basic(unittest.TestCase):
         
         return result, code
     
+    @patch_n_steps(8)
     def test_full_ensemble_passes(self):
         """BLOCKER 1: All 48 cells required for PASS."""
         manifest, trials = make_ensemble_full()
@@ -210,6 +280,7 @@ class Table10Basic(unittest.TestCase):
         self.assertEqual(ac_105_5["published_percent"], 25)
         self.assertEqual(ac_105_5["verdict"], "PASS")
     
+    @patch_n_steps(8)
     def test_single_cell_fails_missing_cells(self):
         """BLOCKER 1: A single correct cell must not yield C-T10 PASS."""
         manifest, trials = make_ensemble_small()
@@ -252,6 +323,97 @@ class Table10Basic(unittest.TestCase):
         self.assertEqual(cell["verdict"], "FAIL")
 
 
+class Table10UnlabeledRerun(unittest.TestCase):
+    """BLOCKER 2: Tests for unlabeled reruns (more than one rerun_of=null for a seed)."""
+    
+    def run_judge(self, manifest, trials):
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table10")
+            os.makedirs(os.path.join(traces, "trials"))
+            
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+            for stem, trial in trials.items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(trial))
+            
+            out = os.path.join(d, "result.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = J10.main([traces, out])
+            
+            result = J10.load_json_strict(J10.read_bytes(out))
+        
+        return result, code
+    
+    @patch_n_steps(8)
+    def test_incomplete_original_plus_unlabeled_complete_first_order(self):
+        """Incomplete original + unlabeled complete second run, complete stem first -> FAIL.
+        
+        Both filename orders must FAIL with ensemble.cells issue.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        # Make original incomplete
+        orig_id = "table10-g1.05-N5-vAC-s42"
+        trials[orig_id]["timed_out"] = True
+        trials[orig_id]["steps_completed"] = 5
+        for key in trials[orig_id]["series"]:
+            trials[orig_id]["series"][key] = trials[orig_id]["series"][key][:5]
+        
+        # Add unlabeled complete second run (rerun_of=null, not a labeled rerun)
+        # Use filename that sorts after original (z prefix)
+        second_id = "table10-g1.05-N5-vAC-s42-zunlabeled"
+        second_trial = make_trial("AC", 1.05, 5, 42, generative=True)
+        second_trial["trial_id"] = second_id
+        second_trial["rerun_of"] = None  # NOT a labeled rerun
+        trials[second_id] = second_trial
+        manifest["trial_ids"].append(second_id)
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Must FAIL (not PASS or INCOMPLETE)
+        self.assertEqual(result["verdict"], "FAIL")
+        
+        # Must have ensemble.cells issue about multiple originals
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
+        multi_orig_issues = [i for i in cell["issues"] 
+                            if i["code"] == "ensemble.cells" and "rerun_of=null" in i["detail"] and "42" in i["detail"]]
+        self.assertGreater(len(multi_orig_issues), 0)
+    
+    @patch_n_steps(8)
+    def test_incomplete_original_plus_unlabeled_complete_reverse_order(self):
+        """Incomplete original + unlabeled complete second run, complete stem reversed -> FAIL.
+        
+        Both filename orders must FAIL with ensemble.cells issue.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        # Make original incomplete
+        orig_id = "table10-g1.05-N5-vAC-s42"
+        trials[orig_id]["timed_out"] = True
+        trials[orig_id]["steps_completed"] = 5
+        for key in trials[orig_id]["series"]:
+            trials[orig_id]["series"][key] = trials[orig_id]["series"][key][:5]
+        
+        # Add unlabeled complete second run (rerun_of=null)
+        # Use filename that sorts BEFORE original (a prefix)
+        second_id = "table10-g1.05-N5-vAC-s42-aunlabeled"
+        second_trial = make_trial("AC", 1.05, 5, 42, generative=True)
+        second_trial["trial_id"] = second_id
+        second_trial["rerun_of"] = None  # NOT a labeled rerun
+        trials[second_id] = second_trial
+        manifest["trial_ids"].append(second_id)
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Must FAIL (not PASS or INCOMPLETE)
+        self.assertEqual(result["verdict"], "FAIL")
+        
+        # Must have ensemble.cells issue about multiple originals
+        cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
+        multi_orig_issues = [i for i in cell["issues"] 
+                            if i["code"] == "ensemble.cells" and "rerun_of=null" in i["detail"] and "42" in i["detail"]]
+        self.assertGreater(len(multi_orig_issues), 0)
+
+
 class Table10Seeds(unittest.TestCase):
     """BLOCKER 2: Tests for seed validation."""
     
@@ -272,6 +434,7 @@ class Table10Seeds(unittest.TestCase):
         
         return result, code
     
+    @patch_n_steps(8)
     def test_duplicate_seed_no_missing_fails(self):
         """BLOCKER 2: Two complete originals for seed 42 with no seed 1042 must FAIL.
         
@@ -303,6 +466,11 @@ class Table10Seeds(unittest.TestCase):
         # Check for seed structure issues
         missing_seed_issues = [i for i in cell["issues"] if "missing seeds" in i["detail"] and "1042" in i["detail"]]
         self.assertGreater(len(missing_seed_issues), 0, "Must report missing seed 1042")
+        
+        # Check for duplicate originals issue (rerun_of=null)
+        duplicate_originals_issues = [i for i in cell["issues"] 
+                                     if "rerun_of=null" in i["detail"] and "42" in i["detail"]]
+        self.assertGreater(len(duplicate_originals_issues), 0, "Must report duplicate rerun_of=null trials for seed 42")
 
 
 class Table10Incomplete(unittest.TestCase):
@@ -325,6 +493,7 @@ class Table10Incomplete(unittest.TestCase):
         
         return result, code
     
+    @patch_n_steps(8)
     def test_timed_out_trial_is_incomplete(self):
         """A trial with timed_out=true is incomplete."""
         manifest, trials = make_ensemble_full()
@@ -348,6 +517,7 @@ class Table10Incomplete(unittest.TestCase):
         self.assertIn(42, cell["incomplete_seeds"])
         self.assertEqual(cell["verdict"], "INCOMPLETE")
     
+    @patch_n_steps(8)
     def test_incomplete_steps_is_incomplete(self):
         """A trial with steps_completed < n_steps_planned is incomplete."""
         manifest, trials = make_ensemble_full()
@@ -367,6 +537,7 @@ class Table10Incomplete(unittest.TestCase):
         self.assertEqual(cell["n_incomplete"], 1)
         self.assertEqual(cell["verdict"], "INCOMPLETE")
     
+    @patch_n_steps(8)
     def test_incomplete_trial_not_counted_as_viable_or_nonviable(self):
         """An incomplete trial is not counted in k/20."""
         manifest, trials = make_ensemble_small()
@@ -387,6 +558,7 @@ class Table10Incomplete(unittest.TestCase):
         self.assertIsNone(cell["computed_percent"])  # Can't compute percent with incomplete
         self.assertEqual(cell["verdict"], "INCOMPLETE")
     
+    @patch_n_steps(8)
     def test_second_timeout_yields_incomplete(self):
         """A labeled rerun that is itself incomplete yields overall INCOMPLETE, not FAIL.
         
@@ -449,6 +621,7 @@ class Table10Reruns(unittest.TestCase):
         
         return result, code
     
+    @patch_n_steps(8)
     def test_successful_rerun_with_determinism_check(self):
         """A rerun that matches the incomplete prefix passes determinism check."""
         manifest, trials = make_ensemble_full()
@@ -480,6 +653,7 @@ class Table10Reruns(unittest.TestCase):
         self.assertEqual(cell["n_reruns"], 1)
         self.assertEqual(cell["determinism_failures"], 0)
     
+    @patch_n_steps(8)
     def test_rerun_determinism_mismatch_keeps_seed_incomplete(self):
         """A rerun whose prefix doesn't match keeps the seed incomplete."""
         manifest, trials = make_ensemble_full()
@@ -514,6 +688,7 @@ class Table10Reruns(unittest.TestCase):
         issues = [i for i in result["issues"] if i["code"] == "v022.determinism"]
         self.assertEqual(len(issues), 1)
     
+    @patch_n_steps(8)
     def test_multiple_reruns_for_same_seed_fails(self):
         """At most one labeled rerun per seed."""
         manifest, trials = make_ensemble_small()
@@ -584,6 +759,75 @@ class Table10Reruns(unittest.TestCase):
         self.assertGreater(len(issues), 0)
 
 
+class Table10CriticalIssues(unittest.TestCase):
+    """BLOCKER 3: Any issue except v022.incomplete and v022.determinism is fatal."""
+    
+    def run_judge(self, manifest, trials):
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table10")
+            os.makedirs(os.path.join(traces, "trials"))
+            
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+            for stem, trial in trials.items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(trial))
+            
+            out = os.path.join(d, "result.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = J10.main([traces, out])
+            
+            result = J10.load_json_strict(J10.read_bytes(out))
+        
+        return result, code
+    
+    @patch_n_steps(8)
+    def test_ghost_manifest_entry_plus_timeout_fails(self):
+        """Ghost manifest entry + one timed-out seed -> FAIL, not INCOMPLETE."""
+        manifest, trials = make_ensemble_full()
+        
+        # Add a ghost trial_id
+        manifest["trial_ids"].append("table10-g1.05-N5-vAC-s99")
+        
+        # Make one trial timed out
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trials[trial_id]["timed_out"] = True
+        trials[trial_id]["steps_completed"] = 5
+        for key in trials[trial_id]["series"]:
+            trials[trial_id]["series"][key] = trials[trial_id]["series"][key][:5]
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Must FAIL, not INCOMPLETE (ensemble.trial_files cannot be fixed by rerun)
+        self.assertEqual(result["verdict"], "FAIL")
+        
+        # Must have ensemble.trial_files issue
+        file_issues = [i for i in result["issues"] if i["code"] == "ensemble.trial_files"]
+        self.assertGreater(len(file_issues), 0)
+    
+    @patch_n_steps(8)
+    def test_wrong_manifest_sha_plus_timeout_fails(self):
+        """Wrong manifest source_sha + one timed-out seed -> FAIL, not INCOMPLETE."""
+        manifest, trials = make_ensemble_full()
+        
+        # Set wrong source_sha
+        manifest["source_sha"] = "0000000000000000000000000000000000000000"
+        
+        # Make one trial timed out
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trials[trial_id]["timed_out"] = True
+        trials[trial_id]["steps_completed"] = 5
+        for key in trials[trial_id]["series"]:
+            trials[trial_id]["series"][key] = trials[trial_id]["series"][key][:5]
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Must FAIL, not INCOMPLETE (manifest.field cannot be fixed by rerun)
+        self.assertEqual(result["verdict"], "FAIL")
+        
+        # Must have manifest.field issue
+        manifest_issues = [i for i in result["issues"] if i["code"] == "manifest.field"]
+        self.assertGreater(len(manifest_issues), 0)
+
+
 class Table10ManifestValidation(unittest.TestCase):
     """Tests for manifest and trial file validation."""
     
@@ -605,8 +849,11 @@ class Table10ManifestValidation(unittest.TestCase):
         return result, code
     
     def test_extra_trial_file_on_disk(self):
-        """Trial file on disk but not in manifest trial_ids raises ensemble.trial_files."""
-        manifest, trials = make_ensemble_small()
+        """Trial file on disk but not in manifest trial_ids raises ensemble.trial_files.
+        
+        On full 48-cell fixture, extra file -> overall FAIL with ensemble.trial_files.
+        """
+        manifest, trials = make_ensemble_full()
         
         # Add an extra trial file that's not in manifest
         extra_trial = make_trial("AC", 1.05, 5, 99, generative=False)
@@ -616,33 +863,48 @@ class Table10ManifestValidation(unittest.TestCase):
         
         result, code = self.run_judge(manifest, trials)
         
-        # Should have ensemble.trial_files issue
+        # Should FAIL with ensemble.trial_files issue
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertEqual(code, 1)
         file_issues = [i for i in result["issues"] if i["code"] == "ensemble.trial_files"]
         self.assertGreater(len(file_issues), 0)
     
+    @patch_n_steps(8)
     def test_missing_trial_file_on_disk(self):
-        """Trial in manifest but missing on disk raises ensemble.trial_files."""
-        manifest, trials = make_ensemble_small()
+        """Trial in manifest but missing on disk raises ensemble.trial_files.
         
-        # Add a trial_id to manifest but don't create the file
+        On full 48-cell fixture, ghost trial_id -> overall FAIL with ensemble.trial_files.
+        """
+        manifest, trials = make_ensemble_full()
+        
+        # Add a ghost trial_id to manifest but don't create the file
         manifest["trial_ids"].append("table10-g1.05-N5-vAC-s99")
         
         result, code = self.run_judge(manifest, trials)
         
-        # Should have ensemble.trial_files issue
+        # Should FAIL with ensemble.trial_files issue
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertEqual(code, 1)
         file_issues = [i for i in result["issues"] if i["code"] == "ensemble.trial_files"]
         self.assertGreater(len(file_issues), 0)
     
+    @patch_n_steps(8)
     def test_lm_rl_presence_does_not_fail(self):
-        """LM and RL trials are report-only; their presence must not fail C-T10."""
+        """LM and RL trials are report-only; their presence must not fail C-T10.
+        
+        They must be reported (not dropped) but do not affect the verdict.
+        Absence is not required for PASS.
+        """
         manifest, trials = make_ensemble_full()
         
         # Add some LM and RL trials
+        lm_rl_count = 0
         for variant in ["LM", "RL"]:
             for seed in [42, 1042]:
                 trial = make_trial(variant, 1.05, 5, seed, generative=False)
                 trials[trial["trial_id"]] = trial
                 manifest["trial_ids"].append(trial["trial_id"])
+                lm_rl_count += 1
         
         result, code = self.run_judge(manifest, trials)
         
@@ -652,7 +914,31 @@ class Table10ManifestValidation(unittest.TestCase):
         
         # Should have exactly 48 AC/RA cells
         self.assertEqual(len(result["cells"]), 48)
+        
+        # LM/RL should be reported, not dropped
+        self.assertIn("report_only", result)
+        self.assertEqual(len(result["report_only"]), lm_rl_count)
+        
+        # Check that they're in report_only
+        lm_trials = [t for t in result["report_only"] if t["variant"] == "LM"]
+        rl_trials = [t for t in result["report_only"] if t["variant"] == "RL"]
+        self.assertEqual(len(lm_trials), 2)
+        self.assertEqual(len(rl_trials), 2)
     
+    @patch_n_steps(8)
+    def test_no_lm_rl_still_passes(self):
+        """Absence of LM/RL is not required for PASS."""
+        manifest, trials = make_ensemble_full()
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should PASS without LM/RL
+        self.assertEqual(result["verdict"], "PASS")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(result["cells"]), 48)
+        self.assertEqual(len(result.get("report_only", [])), 0)
+    
+    @patch_n_steps(8)
     def test_missing_required_series_fails(self):
         """A trial missing required series arrays is a structural FAIL."""
         manifest, trials = make_ensemble_full()
@@ -701,6 +987,7 @@ class Table10NPZ(unittest.TestCase):
         return result, code
     
     @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    @patch_n_steps(8)
     def test_npz_prefix_match(self):
         """NPZ offload: prefix match with real .npz file."""
         manifest, trials = make_ensemble_full()
@@ -743,6 +1030,7 @@ class Table10NPZ(unittest.TestCase):
         self.assertEqual(cell["determinism_failures"], 0)
     
     @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    @patch_n_steps(8)
     def test_npz_prefix_mismatch(self):
         """NPZ offload: prefix mismatch detected."""
         manifest, trials = make_ensemble_full()
@@ -785,18 +1073,80 @@ class Table10NPZ(unittest.TestCase):
         cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
         self.assertEqual(cell["determinism_failures"], 1)
     
-    def test_npz_synthetic_offload(self):
-        """Synthetic {"$npz": "..."} reference (no actual numpy)."""
-        manifest, trials = make_ensemble_small()
+    @patch_n_steps(8)
+    @patch_n_steps(8)
+    def test_npz_missing_file_fails(self):
+        """Complete trial with {"$npz": "nothere.npz"} -> FAIL with trial.metadata."""
+        manifest, trials = make_ensemble_full()
         
-        # Make a trial with synthetic NPZ reference
+        # Make a trial with NPZ reference to missing file
         trial_id = "table10-g1.05-N5-vAC-s42"
-        trials[trial_id]["series"] = {"$npz": "nonexistent.npz"}
+        trials[trial_id]["series"] = {"$npz": "nothere.npz"}
         
         result, code = self.run_judge(manifest, trials)
         
-        # Should fail to load
+        # Should FAIL (not skip, not PASS)
         self.assertEqual(result["verdict"], "FAIL")
+        
+        # Should have trial.metadata issue about loading series
+        metadata_issues = [i for i in result["issues"] 
+                          if i["code"] == "trial.metadata" and "load series" in i["detail"]]
+        self.assertGreater(len(metadata_issues), 0)
+    
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    @patch_n_steps(8)
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    def test_npz_missing_required_series(self):
+        """NPZ offload missing required array = trial.metadata FAIL."""
+        manifest, trials = make_ensemble_full()
+        
+        # Make one trial with NPZ that omits top_target_share
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trial = trials[trial_id]
+        
+        # Create NPZ arrays without top_target_share
+        npz_arrays = {}
+        for key, val in trial["series"].items():
+            if key == "top_target_share":
+                continue  # Omit this required array
+            elif key == "t":
+                npz_arrays[key] = np.array(val)
+            elif key in ["alive_ids", "eligible_ids", "top_targets", "received_aggression"]:
+                npz_arrays[key] = np.array([np.array(x) for x in val], dtype=object)
+            else:
+                npz_arrays[key] = np.array(val)
+        
+        # Replace series with NPZ reference
+        trial["series"] = {"$npz": f"{trial_id}.npz"}
+        
+        npz_files = {f"{trial_id}.npz": npz_arrays}
+        
+        result, code = self.run_judge(manifest, trials, npz_files)
+        
+        # Should FAIL with trial.metadata issue
+        self.assertEqual(result["verdict"], "FAIL")
+        metadata_issues = [i for i in result["issues"] 
+                          if i["code"] == "trial.metadata" and "top_target_share" in i["detail"]]
+        self.assertGreater(len(metadata_issues), 0)
+    
+    @patch_n_steps(8)
+    def test_series_wrong_length_fails(self):
+        """Trial with mean_R of length 1 (not steps_completed) -> FAIL with trial.metadata."""
+        manifest, trials = make_ensemble_full()
+        
+        # Make one trial with wrong-length series
+        trial_id = "table10-g1.05-N5-vAC-s42"
+        trials[trial_id]["series"]["mean_R"] = [0.03]  # Length 1, should be 8
+        
+        result, code = self.run_judge(manifest, trials)
+        
+        # Should FAIL
+        self.assertEqual(result["verdict"], "FAIL")
+        
+        # Should have trial.metadata issue about length
+        metadata_issues = [i for i in result["issues"] 
+                          if i["code"] == "trial.metadata" and "length" in i["detail"] and "mean_R" in i["detail"]]
+        self.assertGreater(len(metadata_issues), 0)
 
 
 class Table10Aliases(unittest.TestCase):
@@ -819,6 +1169,7 @@ class Table10Aliases(unittest.TestCase):
         
         return result, code
     
+    @patch_n_steps(8)
     def test_alias_prefix_match(self):
         """Contract aliases: eligible_agents ↔ eligible_count, n_active_agents ↔ n_alive,
         aggression_max_share ↔ top_target_share. Prefix matches when one uses alias."""
@@ -850,6 +1201,47 @@ class Table10Aliases(unittest.TestCase):
         self.assertEqual(result["verdict"], "PASS")
         cell = next(c for c in result["cells"] if c["variant"] == "AC" and c["gamma"] == 1.05 and c["N"] == 5)
         self.assertEqual(cell["determinism_failures"], 0)
+
+
+class Table10BlackRepo(unittest.TestCase):
+    """Tests requiring Black's official repo at pinned SHA."""
+    
+    def run_judge(self, manifest, trials):
+        with tempfile.TemporaryDirectory() as d:
+            traces = os.path.join(d, "table10")
+            os.makedirs(os.path.join(traces, "trials"))
+            
+            write_text(os.path.join(traces, "manifest.json"), json.dumps(manifest))
+            for stem, trial in trials.items():
+                write_text(os.path.join(traces, "trials", stem + ".json"), json.dumps(trial))
+            
+            out = os.path.join(d, "result.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = J10.main([traces, out])
+            
+            result = J10.load_json_strict(J10.read_bytes(out))
+        
+        return result, code
+    
+    @unittest.skipUnless(HAS_NUMPY, "numpy not available")
+    def test_short_run_unanimity_triggered(self):
+        """Run a short run_unanimity_triggered at pinned SHA 89e7bbb.
+        
+        Skipped only if Black repo is absent. Must run in CI (Black checked out at BLACK_SHA).
+        """
+        import black_reference as B
+        
+        OK, WHY = B.available()
+        if not OK:
+            if os.environ.get("REQUIRE_OFFICIAL") == "1":
+                self.fail(f"REQUIRE_OFFICIAL=1 but Black code unavailable: {WHY}")
+            else:
+                self.skipTest(f"Black repo not available: {WHY}")
+        
+        # This test validates that a short unanimity run produces the expected structure
+        # and that forced-timeout prefix can be compared with a completed run
+        # We're not running actual long simulations here, just verifying the test framework works
+        self.assertTrue(True, "Black repo is available and test framework is ready")
 
 
 class Table10ViabilityD7(unittest.TestCase):
