@@ -5,7 +5,6 @@ public import Mathlib.Data.Finset.Basic
 public import Mathlib.Logic.Relation
 public import Mathlib.Combinatorics.SimpleGraph.Connectivity.Connected
 public import Mathlib.Combinatorics.SimpleGraph.Basic
-public import Batteries.Util.ProofWanted
 
 /-
 Copyright (c) 2026 Wes Eklund. All rights reserved.
@@ -562,15 +561,106 @@ theorem existence_equilibrium_no_narcissism_if_weak_components (med : N → N)
     | inl hx => left; exact hx
     | inr hx => right; exact hx
 
-/-- **Theorem 3 "only if" with minimum mutual mediator sets as the parts**, the form the
-first draft of this file stated. It is equivalent to Sack's form (both say the mediation
-graph has at least two weak components).
+omit [Fintype N] in
+/-- Every nonempty mediation-closed set is a finite disjoint union of minimum mutual
+mediator sets. Induction on cardinality: the set is already indecomposable, or the
+definition splits it into two strictly smaller nonempty closed parts. -/
+lemma exists_minimum_mms_partition (net : MimeticNetwork N) (S : Finset N)
+    (hclosed : isMutualMediatorSet net S) (hne : S.Nonempty) :
+    ∃ P : Finset (Finset N),
+      (∀ T ∈ P, isMinimumMutualMediatorSet net T) ∧
+      (∀ T₁ ∈ P, ∀ T₂ ∈ P, T₁ ≠ T₂ → T₁ ∩ T₂ = ∅) ∧
+      S = P.biUnion id := by
+  classical
+  let motive : ℕ → Prop := fun n =>
+    ∀ S : Finset N, S.card = n → isMutualMediatorSet net S → S.Nonempty →
+      ∃ P : Finset (Finset N),
+        (∀ T ∈ P, isMinimumMutualMediatorSet net T) ∧
+        (∀ T₁ ∈ P, ∀ T₂ ∈ P, T₁ ≠ T₂ → T₁ ∩ T₂ = ∅) ∧
+        S = P.biUnion id
+  have hmotive : ∀ n, motive n := by
+    intro n
+    refine Nat.strongRecOn (motive := motive) n ?_
+    intro n ih S hcard hclosed hne
+    by_cases hmin : isMinimumMutualMediatorSet net S
+    · refine ⟨{S}, ?_, ?_, ?_⟩
+      · intro T hT
+        simp only [Finset.mem_singleton] at hT
+        rwa [hT]
+      · intro T₁ hT₁ T₂ hT₂ hneT
+        simp only [Finset.mem_singleton] at hT₁ hT₂
+        exact absurd (hT₁.trans hT₂.symm) hneT
+      · rw [Finset.singleton_biUnion]
+        rfl
+    · have hsplit : ∃ S₁ S₂ : Finset N, S₁.Nonempty ∧ S₂.Nonempty ∧
+          isMutualMediatorSet net S₁ ∧ isMutualMediatorSet net S₂ ∧
+          S₁ ∩ S₂ = ∅ ∧ S₁ ∪ S₂ = S := by
+        by_contra h
+        exact hmin ⟨hclosed, hne, fun S₁ S₂ h₁ne h₂ne h₁c h₂c hdisj hunion =>
+          h ⟨S₁, S₂, h₁ne, h₂ne, h₁c, h₂c, hdisj, hunion⟩⟩
+      obtain ⟨S₁, S₂, h₁ne, h₂ne, h₁c, h₂c, hdisj, hunion⟩ := hsplit
+      have h₁lt : S₁.card < n := by
+        have hadd : S.card = S₁.card + S₂.card := by
+          rw [← hunion]
+          exact Finset.card_union_of_disjoint
+            (Finset.disjoint_iff_inter_eq_empty.mpr hdisj)
+        have h₂pos : 0 < S₂.card := h₂ne.card_pos
+        omega
+      have h₂lt : S₂.card < n := by
+        have hadd : S.card = S₁.card + S₂.card := by
+          rw [← hunion]
+          exact Finset.card_union_of_disjoint
+            (Finset.disjoint_iff_inter_eq_empty.mpr hdisj)
+        have h₁pos : 0 < S₁.card := h₁ne.card_pos
+        omega
+      obtain ⟨P₁, hP₁min, hP₁disj, hP₁cov⟩ := ih S₁.card h₁lt S₁ rfl h₁c h₁ne
+      obtain ⟨P₂, hP₂min, hP₂disj, hP₂cov⟩ := ih S₂.card h₂lt S₂ rfl h₂c h₂ne
+      refine ⟨P₁ ∪ P₂, ?_, ?_, ?_⟩
+      · intro T hT
+        simp only [Finset.mem_union] at hT
+        rcases hT with hT | hT
+        · exact hP₁min T hT
+        · exact hP₂min T hT
+      · intro T₁ hT₁ T₂ hT₂ hneT
+        simp only [Finset.mem_union] at hT₁ hT₂
+        have hsub₁ : ∀ T ∈ P₁, T ⊆ S₁ := by
+          intro T hT
+          rw [hP₁cov]
+          exact Finset.subset_biUnion_of_mem id hT
+        have hsub₂ : ∀ T ∈ P₂, T ⊆ S₂ := by
+          intro T hT
+          rw [hP₂cov]
+          exact Finset.subset_biUnion_of_mem id hT
+        rcases hT₁ with hT₁ | hT₁ <;> rcases hT₂ with hT₂ | hT₂
+        · exact hP₁disj T₁ hT₁ T₂ hT₂ hneT
+        · refine Finset.eq_empty_of_forall_notMem ?_
+          intro x hx
+          have : x ∈ S₁ ∩ S₂ := Finset.mem_inter.mpr
+            ⟨hsub₁ T₁ hT₁ (Finset.mem_inter.mp hx).1,
+              hsub₂ T₂ hT₂ (Finset.mem_inter.mp hx).2⟩
+          rw [hdisj] at this
+          exact Finset.notMem_empty x this
+        · refine Finset.eq_empty_of_forall_notMem ?_
+          intro x hx
+          have : x ∈ S₁ ∩ S₂ := Finset.mem_inter.mpr
+            ⟨hsub₁ T₂ hT₂ (Finset.mem_inter.mp hx).2,
+              hsub₂ T₁ hT₁ (Finset.mem_inter.mp hx).1⟩
+          rw [hdisj] at this
+          exact Finset.notMem_empty x this
+        · exact hP₂disj T₁ hT₁ T₂ hT₂ hneT
+      · rw [Finset.union_biUnion, ← hP₁cov, ← hP₂cov, hunion]
+  exact hmotive S.card S rfl hclosed hne
 
-This is trickier than the basic form. The main gap is the lemma that every weak component
-of the mediation graph is a minimum mutual mediator set. With that, the proof would construct
-all weak components as a partition and apply the basic "only if" theorem. Left as `proof_wanted`
-because proving the lemma involves technical work with decidability of equivalence closures. -/
-proof_wanted existence_equilibrium_no_narcissism_only_if_minimum [Nonempty N]
+/-- **Theorem 3 "only if" with minimum mutual mediator sets as the parts**, the form the
+first draft of this file stated.
+
+Proof: the basic "only if" theorem gives two nonempty, disjoint, mediation-closed sets
+covering every node. `exists_minimum_mms_partition` refines each of them, by induction
+on cardinality, into a nonempty family of pairwise disjoint minimum mutual mediator sets.
+The union of the two families has at least two members, because each family is nonempty
+and its sets lie inside disjoint parts, so the families are disjoint. Those members are
+pairwise disjoint and cover every node. -/
+theorem existence_equilibrium_no_narcissism_only_if_minimum [Nonempty N]
     (net : MimeticNetwork N)
     (h_equil : net.inEquilibrium)
     (h_no_self : ∀ n : N, net.obj n ≠ n) :
@@ -578,7 +668,110 @@ proof_wanted existence_equilibrium_no_narcissism_only_if_minimum [Nonempty N]
       2 ≤ partition.card ∧
       (∀ S ∈ partition, isMinimumMutualMediatorSet net S) ∧
       (∀ S₁ ∈ partition, ∀ S₂ ∈ partition, S₁ ≠ S₂ → S₁ ∩ S₂ = ∅) ∧
-      (Finset.univ : Finset N) = partition.biUnion id
+      (Finset.univ : Finset N) = partition.biUnion id := by
+  classical
+  obtain ⟨parts, hcard, hparts, hdisj, hcover⟩ :=
+    existence_equilibrium_no_narcissism_only_if net h_equil h_no_self
+  obtain ⟨A, hA, B, hB, hAB⟩ := Finset.one_lt_card.mp hcard
+  -- `A` is one part. Its complement is the union of the other closed parts.
+  let Bset : Finset N := Finset.univ \ A
+  have hBne : Bset.Nonempty := by
+    obtain ⟨b, hb⟩ := (hparts B hB).1
+    refine ⟨b, Finset.mem_sdiff.mpr ⟨Finset.mem_univ _, ?_⟩⟩
+    intro hbA
+    have hbAB : b ∈ A ∩ B := Finset.mem_inter.mpr ⟨hbA, hb⟩
+    rw [hdisj A hA B hB hAB] at hbAB
+    exact Finset.notMem_empty b hbAB
+  have hBclosed : isMutualMediatorSet net Bset := by
+    intro x hx
+    have hxP : x ∈ parts.biUnion id := by
+      rw [← hcover]
+      exact Finset.mem_univ x
+    obtain ⟨S, hS, hxS⟩ := Finset.mem_biUnion.mp hxP
+    have hSne : S ≠ A := by
+      intro hSA
+      exact (Finset.mem_sdiff.mp hx).2 (hSA ▸ hxS)
+    have hmedS : net.med x ∈ S := (hparts S hS).2 x hxS
+    refine Finset.mem_sdiff.mpr ⟨Finset.mem_univ _, ?_⟩
+    intro hmedA
+    have hmem : net.med x ∈ A ∩ S := Finset.mem_inter.mpr ⟨hmedA, hmedS⟩
+    rw [hdisj A hA S hS hSne.symm] at hmem
+    exact Finset.notMem_empty _ hmem
+  obtain ⟨PA, hPAmin, hPAdisj, hPAcov⟩ :=
+    exists_minimum_mms_partition net A (hparts A hA).2 (hparts A hA).1
+  obtain ⟨PB, hPBmin, hPBdisj, hPBcov⟩ :=
+    exists_minimum_mms_partition net Bset hBclosed hBne
+  have hSubA : ∀ T ∈ PA, T ⊆ A := by
+    intro T hT
+    rw [hPAcov]
+    exact Finset.subset_biUnion_of_mem id hT
+  have hSubB : ∀ T ∈ PB, T ⊆ Bset := by
+    intro T hT
+    rw [hPBcov]
+    exact Finset.subset_biUnion_of_mem id hT
+  have hPAne : PA.Nonempty := by
+    obtain ⟨a, ha⟩ := (hparts A hA).1
+    rw [hPAcov] at ha
+    obtain ⟨T, hT, _⟩ := Finset.mem_biUnion.mp ha
+    exact ⟨T, hT⟩
+  have hPBne : PB.Nonempty := by
+    obtain ⟨b, hb⟩ := hBne
+    rw [hPBcov] at hb
+    obtain ⟨T, hT, _⟩ := Finset.mem_biUnion.mp hb
+    exact ⟨T, hT⟩
+  refine ⟨PA ∪ PB, ?_, ?_, ?_, ?_⟩
+  · obtain ⟨TA, hTA⟩ := hPAne
+    obtain ⟨TB, hTB⟩ := hPBne
+    have hTAneq : TA ≠ TB := by
+      intro hEq
+      obtain ⟨x, hx⟩ := (hPAmin TA hTA).2.1
+      have hxA : x ∈ A := hSubA TA hTA hx
+      have hxB : x ∈ Bset := hSubB TB hTB (hEq ▸ hx)
+      have hxAB : x ∈ A ∩ Bset := Finset.mem_inter.mpr ⟨hxA, hxB⟩
+      rw [Finset.inter_sdiff_self] at hxAB
+      exact Finset.notMem_empty x hxAB
+    have htwo : ({TA, TB} : Finset (Finset N)) ⊆ PA ∪ PB := by
+      intro T hT
+      simp only [Finset.mem_insert, Finset.mem_singleton] at hT
+      rcases hT with rfl | rfl
+      · exact Finset.mem_union.mpr (Or.inl hTA)
+      · exact Finset.mem_union.mpr (Or.inr hTB)
+    have hle := Finset.card_le_card htwo
+    rwa [Finset.card_pair hTAneq] at hle
+  · intro S hS
+    simp only [Finset.mem_union] at hS
+    rcases hS with hS | hS
+    · exact hPAmin S hS
+    · exact hPBmin S hS
+  · intro S₁ hS₁ S₂ hS₂ hne
+    simp only [Finset.mem_union] at hS₁ hS₂
+    rcases hS₁ with hS₁ | hS₁ <;> rcases hS₂ with hS₂ | hS₂
+    · exact hPAdisj S₁ hS₁ S₂ hS₂ hne
+    · refine Finset.eq_empty_of_forall_notMem ?_
+      intro x hx
+      have hxAB : x ∈ A ∩ Bset := Finset.mem_inter.mpr
+        ⟨hSubA S₁ hS₁ (Finset.mem_inter.mp hx).1,
+          hSubB S₂ hS₂ (Finset.mem_inter.mp hx).2⟩
+      rw [Finset.inter_sdiff_self] at hxAB
+      exact Finset.notMem_empty x hxAB
+    · refine Finset.eq_empty_of_forall_notMem ?_
+      intro x hx
+      have hxAB : x ∈ A ∩ Bset := Finset.mem_inter.mpr
+        ⟨hSubA S₂ hS₂ (Finset.mem_inter.mp hx).2,
+          hSubB S₁ hS₁ (Finset.mem_inter.mp hx).1⟩
+      rw [Finset.inter_sdiff_self] at hxAB
+      exact Finset.notMem_empty x hxAB
+    · exact hPBdisj S₁ hS₁ S₂ hS₂ hne
+  · ext x
+    simp only [Finset.mem_univ, Finset.mem_biUnion, id_eq, Finset.mem_union, true_iff]
+    by_cases hxA : x ∈ A
+    · rw [hPAcov] at hxA
+      obtain ⟨T, hT, hxT⟩ := Finset.mem_biUnion.mp hxA
+      exact ⟨T, Or.inl hT, hxT⟩
+    · have hxB : x ∈ Bset := Finset.mem_sdiff.mpr ⟨Finset.mem_univ x, hxA⟩
+      rw [hPBcov] at hxB
+      obtain ⟨T, hT, hxT⟩ := Finset.mem_biUnion.mp hxB
+      exact ⟨T, Or.inr hT, hxT⟩
 
 omit [Fintype N] [DecidableEq N] in
 /-- **Sack's Theorem 4 (Existence of Equilibrium with Narcissism).** When self-desire is
