@@ -12,6 +12,7 @@ public import Mathlib.Algebra.Order.BigOperators.Group.Finset
 public import Mathlib.Algebra.BigOperators.Ring.Finset
 public import Mathlib.Order.WellFounded
 public import Mathlib.Tactic.Ring
+public import Batteries.Logic
 
 /-
 Copyright (c) 2026 Wes Eklund. All rights reserved.
@@ -211,8 +212,9 @@ lemma localField_ne_zero (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
     simp only [toSpin]
     omega
 
-instance (s : State V) (b : BinaryLabel) : DecidablePred (fun u : V => s u = b) :=
-  fun _ => inferInstance
+/-- `instDecidablePredComp` from Batteries, kept local so it does not leave this module. -/
+local instance (s : State V) (b : BinaryLabel) : DecidablePred (fun u : V => s u = b) :=
+  instDecidablePredComp (p := (· = b)) (f := s)
 
 /-- Neighbor-spin sum equals `(number of neighbors labeled 1) - (number labeled 0)`. -/
 lemma neighbor_spin_sum (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
@@ -491,6 +493,8 @@ lemma energy_lower_bound (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
 
 /-- From any initial state, the trajectory eventually has period dividing 2:
 a fixed point or a 2-cycle.
+
+`period_at_most_2` proves that the period divides 2.
 
 The fixed-point disjunct is kept on purpose so the statement matches O5.
 It is redundant: a fixed point at time `n` already satisfies

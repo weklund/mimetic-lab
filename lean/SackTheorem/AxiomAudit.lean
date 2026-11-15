@@ -45,6 +45,16 @@ When you add a theorem, add its line here.
 #guard_msgs in
 #print axioms MimeticTheory.existence_equilibrium_no_narcissism_only_if
 
+/-- info: 'MimeticTheory.exists_minimum_mms_partition' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms MimeticTheory.exists_minimum_mms_partition
+
+/-- info: 'MimeticTheory.existence_equilibrium_no_narcissism_only_if_minimum' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms MimeticTheory.existence_equilibrium_no_narcissism_only_if_minimum
+
 /-- info: 'MimeticTheory.existence_equilibrium_no_narcissism_if' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms MimeticTheory.existence_equilibrium_no_narcissism_if
