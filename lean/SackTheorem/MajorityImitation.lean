@@ -7,7 +7,11 @@ public import Mathlib.Combinatorics.SimpleGraph.Finite
 public import Mathlib.Data.Nat.Basic
 public import Mathlib.Data.Int.Basic
 public import Mathlib.Algebra.Order.Ring.Int
-public import Batteries.Util.ProofWanted
+public import Mathlib.Algebra.Order.Ring.Abs
+public import Mathlib.Algebra.Order.BigOperators.Group.Finset
+public import Mathlib.Algebra.BigOperators.Ring.Finset
+public import Mathlib.Order.WellFounded
+public import Mathlib.Tactic.Ring
 
 /-
 Copyright (c) 2026 Wes Eklund. All rights reserved.
@@ -34,8 +38,10 @@ or about continuous hostility, multiplying attraction, or scapegoat mechanisms.
   multiplies with the number already polarized
 - No objects and no acquisitive rivalry stage; agents copy labels directly
 - No scapegoat-specific mechanism
-- This is only the period bound for the binary rule, not G4's inevitable
-  unanimity (see O6 for split fixed points)
+- What is proved here is that every trajectory of this binary majority rule
+  eventually has period dividing 2 (a fixed point or a 2-cycle), together with
+  explicit split fixed points, so unanimity is not inevitable under this rule.
+  This is not G4's inevitable unanimity (see O6 for the split examples).
 
 A pass upgrades only this formalization of the majority rule, never G4 or any Girard claim.
 
@@ -52,9 +58,9 @@ A pass upgrades only this formalization of the majority rule, never G4 or any Gi
 
 ## Main results
 
-1. **Period at most 2** (Goles-Olivos style): stated as `proof_wanted`. The full
-   proof requires an energy (Lyapunov) function argument. Leaving this unproved
-   does not upgrade O5, which remains reported-by-source.
+1. **Period dividing 2** (Goles-Olivos): `period_at_most_2`. From any initial
+   state the trajectory eventually has period dividing 2, a fixed point or a
+   2-cycle.
 
 2. **Explicit split fixed points**: concrete small graphs and states that are
    fixed and not unanimous, proved by `decide`.
@@ -174,379 +180,432 @@ theorem splitStateTwoTriangles_not_unanimous : ¬isUnanimous splitStateTwoTriang
   subst h0
   simp at h3
 
-/-- Map binary label to spin in {-1, +1} -/
+/-- Map a binary label to a spin in `{+1, -1}`. -/
 def toSpin (b : BinaryLabel) : ℤ :=
   if b = 0 then -1 else 1
 
-/-- Inverse: map spin back to binary label (sign function) -/
-def fromSpin (z : ℤ) : BinaryLabel :=
-  if z < 0 then 0 else 1
+lemma toSpin_zero : toSpin 0 = -1 := by simp [toSpin]
 
-lemma toSpin_zero : toSpin 0 = -1 := rfl
-lemma toSpin_one : toSpin 1 = 1 := by decide
+lemma toSpin_one : toSpin 1 = 1 := by simp [toSpin]
 
-/-- toSpin values are ±1 -/
-lemma toSpin_abs (b : BinaryLabel) : toSpin b = -1 ∨ toSpin b = 1 := by
+lemma abs_toSpin (b : BinaryLabel) : |toSpin b| = 1 := by
   match b with
-  | 0 => left; rfl
-  | 1 => right; decide
+  | 0 => simp [toSpin]
+  | 1 => simp [toSpin]
 
-/-- The local field at vertex v: h_v(s) = 2 * (sum of spins of neighbors) + spin of v.
-    This encodes edge weight 2 and self weight 1, implementing keep-own-on-tie. -/
+/-- Local field `h_v(s) = 2 * (sum of neighbor spins) + spin(v)`.
+Edge weight 2 and self weight 1 encode strict majority with keep-own-on-tie.
+The field is never zero. -/
 def localField (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
     (s : State V) (v : V) : ℤ :=
-  2 * (G.neighborFinset v).sum (fun u => toSpin (s u)) + toSpin (s v)
-
-/-- The local field is always odd, hence never zero -/
-lemma localField_odd (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
-    (s : State V) (v : V) : Odd (localField G s v) := by
-  unfold localField
-  -- 2 * sum is even, toSpin is odd (either -1 or 1)
-  have h_spin_odd : Odd (toSpin (s v)) := by
-    rcases toSpin_abs (s v) with h | h <;> rw [h]
-    · use -1; ring
-    · use 0; ring
-  have h_even : Even (2 * (G.neighborFinset v).sum (fun u => toSpin (s u))) := by
-    use (G.neighborFinset v).sum (fun u => toSpin (s u))
-    rfl
-  obtain ⟨k1, hk1⟩ := h_even
-  obtain ⟨k2, hk2⟩ := h_spin_odd
-  use k1 + k2
-  calc 2 * (G.neighborFinset v).sum (fun u => toSpin (s u)) + toSpin (s v)
-    _ = 2 * k1 + (2 * k2 + 1) := by rw [hk1, hk2]
-    _ = 2 * (k1 + k2) + 1 := by ring
+  2 * ∑ u ∈ G.neighborFinset v, toSpin (s u) + toSpin (s v)
 
 lemma localField_ne_zero (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
     (s : State V) (v : V) : localField G s v ≠ 0 := by
-  have := localField_odd G s v
-  obtain ⟨k, hk⟩ := this
-  rw [hk]
+  unfold localField
+  match s v with
+  | 0 =>
+    simp only [toSpin]
+    omega
+  | 1 =>
+    simp only [toSpin]
+    omega
+
+instance (s : State V) (b : BinaryLabel) : DecidablePred (fun u : V => s u = b) :=
+  fun _ => inferInstance
+
+/-- Neighbor-spin sum equals `(number of neighbors labeled 1) - (number labeled 0)`. -/
+lemma neighbor_spin_sum (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
+    (s : State V) (v : V) :
+    ∑ u ∈ G.neighborFinset v, toSpin (s u) =
+      ((G.neighborFinset v).filter (fun u => s u = 1)).card -
+        ((G.neighborFinset v).filter (fun u => s u = 0)).card := by
+  classical
+  let N := G.neighborFinset v
+  let zeros := N.filter (fun u => s u = 0)
+  let ones := N.filter (fun u => s u = 1)
+  have hdisj : Disjoint zeros ones := by
+    rw [Finset.disjoint_left]
+    intro u hz ho
+    simp only [Finset.mem_filter, zeros, ones] at hz ho
+    exact absurd (hz.2.symm.trans ho.2) (by decide : (0 : Fin 2) ≠ 1)
+  have hunion : zeros ∪ ones = N := by
+    ext u
+    constructor
+    · intro hu
+      simp only [Finset.mem_union, Finset.mem_filter, zeros, ones] at hu
+      rcases hu with hu | hu
+      · exact hu.1
+      · exact hu.1
+    · intro hu
+      have hlabel : s u = 0 ∨ s u = 1 := by
+        match s u with
+        | 0 => left; rfl
+        | 1 => right; rfl
+      rcases hlabel with h0 | h1
+      · simp [Finset.mem_union, Finset.mem_filter, zeros, ones, hu, h0]
+      · simp [Finset.mem_union, Finset.mem_filter, zeros, ones, hu, h1]
+  suffices ∑ u ∈ N, toSpin (s u) = (ones.card : ℤ) - (zeros.card : ℤ) by
+    simpa [N, zeros, ones] using this
+  rw [← hunion, Finset.sum_union hdisj]
+  have hz : ∑ u ∈ zeros, toSpin (s u) = ∑ _u ∈ zeros, (-1 : ℤ) := by
+    apply Finset.sum_congr rfl
+    intro u hu
+    simp only [Finset.mem_filter, zeros] at hu
+    simp [hu.2, toSpin]
+  have ho : ∑ u ∈ ones, toSpin (s u) = ∑ _u ∈ ones, (1 : ℤ) := by
+    apply Finset.sum_congr rfl
+    intro u hu
+    simp only [Finset.mem_filter, ones] at hu
+    simp [hu.2, toSpin]
+  rw [hz, ho, Finset.sum_const, Finset.sum_const]
+  simp only [nsmul_eq_mul]
   omega
 
-/-- Key lemma: the step function equals sign of local field.
-    This is where the majority rule counting lives. -/
+/-- One step is the sign of the local field: strict majority when the neighbor
+sum is nonzero, and the vertex's own label on a tie. -/
 lemma step_eq_sign_localField (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
-    (s : State V) (v : V) : toSpin (step G s v) = if localField G s v < 0 then -1 else 1 := by
-  unfold step majorityRule localField
-  let neighbors := G.neighborFinset v
-  letI : DecidablePred fun u => s u = 0 := fun _ => inferInstance
-  letI : DecidablePred fun u => s u = 1 := fun _ => inferInstance
-  let zeros := neighbors.filter (fun u => s u = 0)
-  let ones := neighbors.filter (fun u => s u = 1)
-  
-  -- Express the sum of spins in terms of zeros and ones
-  have h_partition : neighbors = zeros ∪ ones := by
-    ext u
-    simp [zeros, ones]
-    match s u with
-    | 0 => constructor <;> intro <;> simp
-    | 1 => constructor <;> intro <;> simp
-  
-  have h_disjoint : Disjoint zeros ones := by
-    simp [Finset.disjoint_iff_ne, zeros, ones]
-    intro a ha b hb
-    simp at ha hb
-    omega
-  
-  have h_sum : neighbors.sum (fun u => toSpin (s u)) = (ones.card : ℤ) - (zeros.card : ℤ) := by
-    calc neighbors.sum (fun u => toSpin (s u))
-      _ = (zeros ∪ ones).sum (fun u => toSpin (s u)) := by rw [← h_partition]
-      _ = zeros.sum (fun u => toSpin (s u)) + ones.sum (fun u => toSpin (s u)) := by
-          apply Finset.sum_union
-          exact h_disjoint
-      _ = zeros.sum (fun _ => (-1 : ℤ)) + ones.sum (fun _ => (1 : ℤ)) := by
-          congr 1
-          · apply Finset.sum_congr rfl
-            intro u hu
-            simp [zeros] at hu
-            rw [hu.2]
-            rfl
-          · apply Finset.sum_congr rfl
-            intro u hu
-            simp [ones] at hu
-            rw [hu.2]
-            rfl
-      _ = -(zeros.card : ℤ) + (ones.card : ℤ) := by simp
-      _ = (ones.card : ℤ) - (zeros.card : ℤ) := by ring
-  
-  -- Now analyze the cases
-  split_ifs with h1 h2
-  · -- Case: zeros.card > ones.card
-    -- Then output is 0, so toSpin = -1
-    -- And h_v = 2 * (ones - zeros) + toSpin(s v) < 0
-    have h_field : 2 * neighbors.sum (fun u => toSpin (s u)) + toSpin (s v) < 0 := by
-      rw [h_sum]
-      have : (zeros.card : ℤ) > (ones.card : ℤ) := Int.ofNat_lt.mpr h1
-      rcases toSpin_abs (s v) with hs | hs <;> rw [hs] <;> omega
-    simp [toSpin, h_field]
-  · -- Case: ones.card > zeros.card
-    -- Then output is 1, so toSpin = 1
-    -- And h_v = 2 * (ones - zeros) + toSpin(s v) > 0
-    have h_field : 2 * neighbors.sum (fun u => toSpin (s u)) + toSpin (s v) > 0 := by
-      rw [h_sum]
-      have : (ones.card : ℤ) > (zeros.card : ℤ) := Int.ofNat_lt.mpr h2
-      rcases toSpin_abs (s v) with hs | hs <;> rw [hs] <;> omega
-    have h_field_nonneg : 2 * neighbors.sum (fun u => toSpin (s u)) + toSpin (s v) >= 0 := by omega
-    simp [toSpin, h_field, h_field_nonneg]
-  · -- Case: tie (zeros.card = ones.card)
-    -- Then output is s v
-    -- And h_v = 2 * 0 + toSpin(s v) = toSpin(s v)
-    push_neg at h1 h2
-    have h_eq : zeros.card = ones.card := by omega
-    have h_field : 2 * neighbors.sum (fun u => toSpin (s u)) + toSpin (s v) = toSpin (s v) := by
-      rw [h_sum, h_eq]
-      ring
-    rcases toSpin_abs (s v) with hs | hs <;> rw [hs] at h_field ⊢
-    · -- s v = 0, so toSpin (s v) = -1, field = -1 < 0
-      have : toSpin 0 = -1 := rfl
-      rw [← this] at h_field ⊢
-      simp at h_field ⊢
-      exact h_field
-    · -- s v = 1, so toSpin (s v) = 1, field = 1 >= 0
-      have : toSpin 1 = 1 := by decide
-      rw [← this] at h_field ⊢
-      simp at h_field ⊢
-      constructor
-      · omega
-      · exact h_field
+    (s : State V) (v : V) :
+    toSpin (step G s v) = if localField G s v < 0 then -1 else 1 := by
+  classical
+  have hsum := neighbor_spin_sum G s v
+  have hstep : step G s v =
+      (if {u ∈ G.neighborFinset v | s u = 0}.card > {u ∈ G.neighborFinset v | s u = 1}.card then 0
+        else if {u ∈ G.neighborFinset v | s u = 1}.card > {u ∈ G.neighborFinset v | s u = 0}.card then 1
+        else s v) := by
+    unfold step majorityRule
+    dsimp
+  rw [hstep]
+  by_cases h0 : {u ∈ G.neighborFinset v | s u = 0}.card > {u ∈ G.neighborFinset v | s u = 1}.card
+  · rw [ite_eq_left h0]
+    have hfield : localField G s v < 0 := by
+      unfold localField
+      rw [hsum]
+      match s v with
+      | 0 => simp only [toSpin]; omega
+      | 1 => simp only [toSpin]; omega
+    rw [toSpin_zero, ite_eq_left hfield]
+  · rw [ite_eq_right h0]
+    by_cases h1 : {u ∈ G.neighborFinset v | s u = 1}.card > {u ∈ G.neighborFinset v | s u = 0}.card
+    · rw [ite_eq_left h1]
+      have hfield : 0 < localField G s v := by
+        unfold localField
+        rw [hsum]
+        match s v with
+        | 0 => simp only [toSpin]; omega
+        | 1 => simp only [toSpin]; omega
+      rw [toSpin_one, ite_eq_right (by omega : ¬ localField G s v < 0)]
+    · rw [ite_eq_right h1]
+      have heq : {u ∈ G.neighborFinset v | s u = 0}.card =
+          {u ∈ G.neighborFinset v | s u = 1}.card := by omega
+      have hfield : localField G s v = toSpin (s v) := by
+        unfold localField
+        rw [hsum, heq]
+        ring
+      rw [hfield]
+      match s v with
+      | 0 => rw [toSpin_zero, ite_eq_left (by decide : (-1 : ℤ) < 0)]
+      | 1 => rw [toSpin_one, ite_eq_right (by decide : ¬ (1 : ℤ) < 0)]
 
-/-- Energy function on consecutive states: E(t) = -sum_v sigma_v(s_{t+1}) * h_v(s_t) -/
+/-- Sum of `g` over neighbors, written with an `if` so the two indices can be swapped. -/
+lemma sum_neighbor_ite (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
+    (v : V) (g : V → ℤ) :
+    ∑ u ∈ G.neighborFinset v, g u = ∑ u : V, if G.Adj v u then g u else 0 := by
+  classical
+  rw [G.neighborFinset_eq_filter, Finset.sum_filter]
+
+/-- The spin-field pairing is symmetric in its two states, because adjacency is symmetric. -/
+lemma spin_field_symm (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
+    (x y : State V) :
+    ∑ v : V, toSpin (x v) * localField G y v =
+      ∑ v : V, toSpin (y v) * localField G x v := by
+  classical
+  simp only [localField, mul_add, Finset.sum_add_distrib]
+  have hself :
+      ∑ v : V, toSpin (x v) * toSpin (y v) = ∑ v : V, toSpin (y v) * toSpin (x v) := by
+    apply Finset.sum_congr rfl
+    intro v _
+    ring
+  have hedge :
+      ∑ v : V, toSpin (x v) * (2 * ∑ u ∈ G.neighborFinset v, toSpin (y u)) =
+        ∑ v : V, toSpin (y v) * (2 * ∑ u ∈ G.neighborFinset v, toSpin (x u)) := by
+    have hfactor : ∀ (a b : V → ℤ),
+        ∑ v : V, a v * (2 * ∑ u ∈ G.neighborFinset v, b u) =
+          2 * ∑ v : V, ∑ u ∈ G.neighborFinset v, a v * b u := by
+      intro a b
+      conv_lhs =>
+        arg 2
+        ext v
+        rw [mul_left_comm (a v), Finset.mul_sum]
+      rw [← Finset.mul_sum]
+    rw [hfactor (fun v => toSpin (x v)) (fun v => toSpin (y v)),
+      hfactor (fun v => toSpin (y v)) (fun v => toSpin (x v))]
+    congr 1
+    have hleft :
+        ∑ v : V, ∑ u ∈ G.neighborFinset v, toSpin (x v) * toSpin (y u) =
+          ∑ v : V, ∑ u : V, if G.Adj v u then toSpin (x v) * toSpin (y u) else 0 := by
+      apply Finset.sum_congr rfl
+      intro v _
+      exact sum_neighbor_ite G v (fun u => toSpin (x v) * toSpin (y u))
+    have hright :
+        ∑ v : V, ∑ u ∈ G.neighborFinset v, toSpin (y v) * toSpin (x u) =
+          ∑ v : V, ∑ u : V, if G.Adj v u then toSpin (y v) * toSpin (x u) else 0 := by
+      apply Finset.sum_congr rfl
+      intro v _
+      exact sum_neighbor_ite G v (fun u => toSpin (y v) * toSpin (x u))
+    rw [hleft, hright, Finset.sum_comm]
+    apply Finset.sum_congr rfl
+    intro u _
+    apply Finset.sum_congr rfl
+    intro v _
+    by_cases h : G.Adj v u
+    · have h' : G.Adj u v := (G.adj_comm v u).mp h
+      simp [h, h']
+      ring
+    · have h' : ¬ G.Adj u v := fun hv => h ((G.adj_comm u v).mp hv)
+      simp [h, h']
+  -- Reassociate the factor-of-two sums back to the `localField` shape.
+  calc ∑ v, toSpin (x v) * (2 * ∑ u ∈ G.neighborFinset v, toSpin (y u)) +
+          ∑ v, toSpin (x v) * toSpin (y v)
+      = ∑ v, toSpin (y v) * (2 * ∑ u ∈ G.neighborFinset v, toSpin (x u)) +
+          ∑ v, toSpin (y v) * toSpin (x v) := by rw [hedge, hself]
+    _ = ∑ v, toSpin (y v) * (2 * ∑ u ∈ G.neighborFinset v, toSpin (x u)) +
+          ∑ v, toSpin (y v) * toSpin (x v) := rfl
+
+/-- Energy of a consecutive pair: `E = - ∑_v σ_v(next) * h_v(curr)`. -/
 def energy (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
     (s_curr s_next : State V) : ℤ :=
-  - Finset.univ.sum (fun v : V => toSpin (s_next v) * localField G s_curr v)
+  - ∑ v : V, toSpin (s_next v) * localField G s_curr v
 
-/-- Symmetry lemma: sum_v spin_v(x) * h_v(y) = sum_v spin_v(y) * h_v(x).
-    This follows from the symmetry of the adjacency relation. -/
-lemma energy_symmetric (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
-    (x y : State V) :
-    Finset.univ.sum (fun v => toSpin (x v) * localField G y v) =
-    Finset.univ.sum (fun v => toSpin (y v) * localField G x v) := by
-  unfold localField
-  simp_rw [mul_add, mul_comm (toSpin _) (toSpin _), Finset.sum_add_distrib]
-  congr 1
-  · -- Show: sum_v toSpin(x v) * 2 * sum_u toSpin(y u) * adj = sum_v toSpin(y v) * 2 * sum_u toSpin(x u) * adj
-    simp_rw [mul_comm _ 2, mul_assoc 2]
-    congr 1
-    -- This is the edge symmetry: sum over edges of spin(x_v) * spin(y_u) = sum over edges of spin(y_v) * spin(x_u)
-    calc Finset.univ.sum (fun v => toSpin (x v) * (G.neighborFinset v).sum (fun u => toSpin (y u)))
-      _ = Finset.univ.sum (fun v => (G.neighborFinset v).sum (fun u => toSpin (x v) * toSpin (y u))) := by
-          congr; ext v; rw [Finset.mul_sum]
-      _ = Finset.univ.sum (fun v => (G.neighborFinset v).sum (fun u => toSpin (y u) * toSpin (x v))) := by
-          congr; ext v; congr; ext u; ring
-      _ = Finset.univ.sum (fun v => (G.neighborFinset v).sum (fun u => toSpin (x v) * toSpin (y u))) := by
-          congr; ext v; congr; ext u; ring
-      _ = Finset.univ.sum (fun u => (G.neighborFinset u).sum (fun v => toSpin (x v) * toSpin (y u))) := by
-          -- Swap the order of summation using edge symmetry
-          rw [Finset.sum_comm]
-          congr; ext u; congr; ext v
-          by_cases h : G.Adj v u
-          · simp [SimpleGraph.mem_neighborFinset, h, SimpleGraph.adj_comm.mp h]
-          · have : ¬G.Adj u v := fun h' => h (SimpleGraph.adj_comm.mp h')
-            simp [SimpleGraph.mem_neighborFinset, h, this]
-      _ = Finset.univ.sum (fun u => toSpin (y u) * (G.neighborFinset u).sum (fun v => toSpin (x v))) := by
-          congr; ext u; rw [← Finset.sum_mul]; congr; ext v; ring
-
-/-- Energy difference: E(t+1) - E(t) = -sum_v (sigma_v(s_{t+2}) - sigma_v(s_t)) * h_v(s_{t+1}) -/
-lemma energy_difference (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
-    (s0 : State V) (t : ℕ) :
-    let s_t := (step G)^[t] s0
-    let s_t1 := (step G)^[t+1] s0
-    let s_t2 := (step G)^[t+2] s0
-    energy G s_t1 s_t2 - energy G s_t s_t1 =
-    - Finset.univ.sum (fun v => (toSpin (s_t2 v) - toSpin (s_t v)) * localField G s_t1 v) := by
-  unfold energy
-  ring_nf
-  congr 1
-  calc Finset.univ.sum (fun v => toSpin (s_t1 v) * localField G s_t v) 
-      - Finset.univ.sum (fun v => toSpin (s_t2 v) * localField G s_t1 v)
-    _ = Finset.univ.sum (fun v => toSpin (s_t v) * localField G s_t1 v)
-      - Finset.univ.sum (fun v => toSpin (s_t2 v) * localField G s_t1 v) := by
-        congr 1
-        exact energy_symmetric G s_t1 s_t
-    _ = Finset.univ.sum (fun v => (toSpin (s_t v) - toSpin (s_t2 v)) * localField G s_t1 v) := by
-        rw [← Finset.sum_sub_distrib]
-        congr; ext v; ring
-
-/-- If sigma_v(s_{t+2}) ≠ sigma_v(s_t), then sigma_v(s_{t+2}) = sign(h_v(s_{t+1})),
-    so the contribution to the energy decrease is 2 * |h_v(s_{t+1})| >= 2. -/
-lemma energy_decrease_term (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
-    (s_t s_t1 s_t2 : State V) (v : V)
-    (h_step1 : s_t1 = step G s_t)
-    (h_step2 : s_t2 = step G s_t1)
-    (h_neq : s_t2 v ≠ s_t v) :
-    -(toSpin (s_t2 v) - toSpin (s_t v)) * localField G s_t1 v >= 2 := by
-  -- By step lemma, toSpin (s_t2 v) = sign(h_v(s_t1))
-  have h_sign : toSpin (s_t2 v) = if localField G s_t1 v < 0 then -1 else 1 := by
-    rw [h_step2]
-    exact step_eq_sign_localField G s_t1 v
-  
-  -- Since s_t2 v ≠ s_t v, we have toSpin (s_t2 v) ≠ toSpin (s_t v)
-  have h_spin_neq : toSpin (s_t2 v) ≠ toSpin (s_t v) := by
-    intro h_contra
-    apply h_neq
-    -- If spins are equal, labels are equal
-    -- toSpin maps 0 to -1 and 1 to 1, so if spins are equal, labels are equal
-    match s_t v, s_t2 v with
-    | 0, 0 => rfl
-    | 0, 1 => simp [toSpin] at h_contra
-    | 1, 0 => simp [toSpin] at h_contra
-    | 1, 1 => rfl
-  
-  -- The spins are ±1, and they differ, so one is 1 and one is -1
-  rcases toSpin_abs (s_t v) with ht | ht <;> rcases toSpin_abs (s_t2 v) with ht2 | ht2
-  · -- Both -1, contradiction
-    rw [ht, ht2] at h_spin_neq; contradiction
-  · -- s_t: -1, s_t2: 1, so difference is -2, and h_v > 0
-    rw [ht, ht2] at h_sign h_spin_neq ⊢
-    simp at h_sign
-    have h_field_pos : localField G s_t1 v > 0 := by
-      by_contra h_contra; push_neg at h_contra
-      have : localField G s_t1 v < 0 := by
-        have := localField_ne_zero G s_t1 v
-        omega
-      omega
-    calc -(1 - (-1)) * localField G s_t1 v 
-      _ = -2 * localField G s_t1 v := by ring
-      _ >= 2 := by nlinarith
-  · -- s_t: 1, s_t2: -1, so difference is 2, and h_v < 0
-    rw [ht, ht2] at h_sign h_spin_neq ⊢
-    simp at h_sign
-    have h_field_neg : localField G s_t1 v < 0 := by omega
-    calc -((-1) - 1) * localField G s_t1 v
-      _ = 2 * localField G s_t1 v := by ring
-      _ >= 2 := by nlinarith [localField_odd G s_t1 v]
-  · -- Both 1, contradiction
-    rw [ht, ht2] at h_spin_neq; contradiction
-
-/-- Energy is bounded -/
-lemma energy_bounded (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
-    (s_curr s_next : State V) :
-    |energy G s_curr s_next| ≤ Finset.univ.sum (fun v : V => 2 * (G.neighborFinset v).card + 1) := by
-  unfold energy localField
-  have h_bound : ∀ v, |toSpin (s_next v) * (2 * (G.neighborFinset v).sum (fun u => toSpin (s_curr u)) + toSpin (s_curr v))| 
-      ≤ 2 * (G.neighborFinset v).card + 1 := by
+/-- `E(y, z) - E(x, y) = - ∑_v (σ_v(z) - σ_v(x)) * h_v(y)`. -/
+lemma energy_difference (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
+    (x y z : State V) :
+    energy G y z - energy G x y =
+      - ∑ v : V, (toSpin (z v) - toSpin (x v)) * localField G y v := by
+  simp only [energy]
+  have hsym := spin_field_symm G y x
+  have hterm : ∀ v, toSpin (x v) * localField G y v - toSpin (z v) * localField G y v =
+      -((toSpin (z v) - toSpin (x v)) * localField G y v) := by
     intro v
-    -- |toSpin| = 1, |sum of spins| <= |neighborFinset|, so |field| <= 2*degree + 1
-    have h_spin_bound : |toSpin (s_next v)| = 1 := by
-      rcases toSpin_abs (s_next v) with h | h <;> rw [h]
-      · norm_num
-      · norm_num
-    have h_sum_bound : |(G.neighborFinset v).sum (fun u => toSpin (s_curr u))| ≤ (G.neighborFinset v).card := by
-      trans (G.neighborFinset v).sum (fun u => |toSpin (s_curr u)|)
-      · exact Finset.abs_sum_le_sum_abs _ _
-      · calc (G.neighborFinset v).sum (fun u => |toSpin (s_curr u)|)
-          _ = (G.neighborFinset v).sum (fun _ => (1 : ℤ)) := by
-              congr; ext u; rcases toSpin_abs (s_curr u) with h | h <;> rw [h] <;> norm_num
-          _ = (G.neighborFinset v).card := Finset.sum_const_nat (fun _ _ => rfl)
-    rw [abs_mul, h_spin_bound, one_mul]
-    calc |2 * (G.neighborFinset v).sum (fun u => toSpin (s_curr u)) + toSpin (s_curr v)|
-      _ ≤ |2 * (G.neighborFinset v).sum (fun u => toSpin (s_curr u))| + |toSpin (s_curr v)| := abs_add _ _
-      _ = 2 * |(G.neighborFinset v).sum (fun u => toSpin (s_curr u))| + |toSpin (s_curr v)| := by rw [abs_mul]; norm_num
-      _ ≤ 2 * (G.neighborFinset v).card + 1 := by
-          have : |toSpin (s_curr v)| = 1 := by
-            rcases toSpin_abs (s_curr v) with h | h <;> rw [h]
-            · norm_num
-            · norm_num
-          rw [this]
-          omega
-  calc |energy G s_curr s_next|
-    _ = |- Finset.univ.sum (fun v => toSpin (s_next v) * localField G s_curr v)| := rfl
-    _ = |Finset.univ.sum (fun v => toSpin (s_next v) * localField G s_curr v)| := abs_neg _
-    _ ≤ Finset.univ.sum (fun v => |toSpin (s_next v) * localField G s_curr v|) := Finset.abs_sum_le_sum_abs _ _
-    _ = Finset.univ.sum (fun v => |toSpin (s_next v) * (2 * (G.neighborFinset v).sum (fun u => toSpin (s_curr u)) + toSpin (s_curr v))|) := rfl
-    _ ≤ Finset.univ.sum (fun v => 2 * (G.neighborFinset v).card + 1) := Finset.sum_le_sum h_bound
+    ring
+  calc -(∑ v, toSpin (z v) * localField G y v) - -(∑ v, toSpin (y v) * localField G x v)
+      = (∑ v, toSpin (y v) * localField G x v) - (∑ v, toSpin (z v) * localField G y v) := by omega
+    _ = (∑ v, toSpin (x v) * localField G y v) - (∑ v, toSpin (z v) * localField G y v) := by
+        rw [hsym]
+    _ = ∑ v, (toSpin (x v) * localField G y v - toSpin (z v) * localField G y v) := by
+        rw [← Finset.sum_sub_distrib]
+    _ = ∑ v, -((toSpin (z v) - toSpin (x v)) * localField G y v) := by
+        simp_rw [hterm]
+    _ = -∑ v, (toSpin (z v) - toSpin (x v)) * localField G y v := by
+        rw [Finset.sum_neg_distrib]
 
-/-- Main theorem: Period at most 2 (Goles-Olivos style).
-    From any initial state, the trajectory eventually has period dividing 2:
-    it reaches a fixed point or alternates between two states.
-    
-    The proof uses an integer energy function that is nonincreasing and strictly decreases
-    when s(t+2) ≠ s(t). Since integer energy is bounded below, it eventually stabilizes,
-    giving period 2.
-    
-    Note: The first disjunct (fixed point) is implied by the second (period dividing 2
-    with k=0), but we keep both to match the Goles-Olivos statement. -/
+/-- If `z = step y` and `z v ≠ x v`, the vertex contribution is at least 2.
+`z v` is the sign of `h_v(y)`, so it points the same way as the field and the
+spin gap is `±2`. -/
+lemma energy_decrease_term (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
+    (x y z : State V) (v : V) (hz : z = step G y) (hneq : z v ≠ x v) :
+    (toSpin (z v) - toSpin (x v)) * localField G y v ≥ 2 := by
+  have hsign : toSpin (z v) = if localField G y v < 0 then -1 else 1 := by
+    rw [hz]
+    exact step_eq_sign_localField G y v
+  have hx : x v = 0 ∨ x v = 1 := by
+    match x v with
+    | 0 => left; rfl
+    | 1 => right; rfl
+  have hzv : z v = 0 ∨ z v = 1 := by
+    match z v with
+    | 0 => left; rfl
+    | 1 => right; rfl
+  rcases hx with hx | hx <;> rcases hzv with hzv | hzv
+  · simp [hx, hzv] at hneq
+  · have hxspin : toSpin (x v) = -1 := by simp [toSpin, hx]
+    have hzspin : toSpin (z v) = 1 := by simp [toSpin, hzv]
+    have hnot : ¬ localField G y v < 0 := by
+      intro hlt
+      have : toSpin (z v) = -1 := by simp [hsign, hlt]
+      simp [hzspin] at this
+    have hpos : 1 ≤ localField G y v := by
+      have hne := localField_ne_zero G y v
+      omega
+    rw [hxspin, hzspin]
+    omega
+  · have hxspin : toSpin (x v) = 1 := by simp [toSpin, hx]
+    have hzspin : toSpin (z v) = -1 := by simp [toSpin, hzv]
+    have hlt : localField G y v < 0 := by
+      by_contra hge
+      have : toSpin (z v) = 1 := by simp [hsign, hge]
+      simp [hzspin] at this
+    rw [hxspin, hzspin]
+    have : localField G y v ≤ -1 := by omega
+    omega
+  · simp [hx, hzv] at hneq
+
+/-- Every vertex contribution is nonnegative along one step. -/
+lemma energy_term_nonneg (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
+    (x y z : State V) (v : V) (hz : z = step G y) :
+    0 ≤ (toSpin (z v) - toSpin (x v)) * localField G y v := by
+  by_cases h : z v = x v
+  · simp [h]
+  · have hge := energy_decrease_term G x y z v hz h
+    omega
+
+/-- `|h_v| ≤ 2 * degree(v) + 1`, so the energy is bounded below independently of time. -/
+lemma energy_lower_bound (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj]
+    (s_curr s_next : State V) :
+    -(∑ v : V, (2 * (G.neighborFinset v).card + 1 : ℤ)) ≤ energy G s_curr s_next := by
+  set bound : ℤ := ∑ v : V, (2 * (G.neighborFinset v).card + 1 : ℤ)
+  have hterm : ∀ v, |toSpin (s_next v) * localField G s_curr v| ≤
+      (2 * (G.neighborFinset v).card + 1 : ℤ) := by
+    intro v
+    unfold localField
+    have hspin_next : |toSpin (s_next v)| = 1 := abs_toSpin _
+    have hspin_curr : |toSpin (s_curr v)| = 1 := abs_toSpin _
+    have hsum : |∑ u ∈ G.neighborFinset v, toSpin (s_curr u)| ≤ (G.neighborFinset v).card := by
+      calc |∑ u ∈ G.neighborFinset v, toSpin (s_curr u)|
+          _ ≤ ∑ u ∈ G.neighborFinset v, |toSpin (s_curr u)| := Finset.abs_sum_le_sum_abs _ _
+          _ = ∑ _u ∈ G.neighborFinset v, (1 : ℤ) := by
+              apply Finset.sum_congr rfl
+              intro u _
+              exact abs_toSpin (s_curr u)
+          _ = (G.neighborFinset v).card := by simp
+    rw [abs_mul, hspin_next, one_mul]
+    calc |2 * ∑ u ∈ G.neighborFinset v, toSpin (s_curr u) + toSpin (s_curr v)|
+        _ ≤ |2 * ∑ u ∈ G.neighborFinset v, toSpin (s_curr u)| + |toSpin (s_curr v)| := abs_add_le _ _
+        _ = 2 * |∑ u ∈ G.neighborFinset v, toSpin (s_curr u)| + |toSpin (s_curr v)| := by
+            rw [abs_mul, abs_of_nonneg (by omega : (0 : ℤ) ≤ 2)]
+        _ ≤ 2 * (G.neighborFinset v).card + 1 := by
+            rw [hspin_curr]
+            have := hsum
+            omega
+  have hsum_le : |∑ v : V, toSpin (s_next v) * localField G s_curr v| ≤ bound := by
+    calc |∑ v : V, toSpin (s_next v) * localField G s_curr v|
+        _ ≤ ∑ v : V, |toSpin (s_next v) * localField G s_curr v| := Finset.abs_sum_le_sum_abs _ _
+        _ ≤ ∑ v : V, (2 * (G.neighborFinset v).card + 1 : ℤ) :=
+            Finset.sum_le_sum (fun v _ => hterm v)
+        _ = bound := rfl
+  unfold energy
+  calc -bound
+      _ ≤ -|∑ v : V, toSpin (s_next v) * localField G s_curr v| := neg_le_neg hsum_le
+      _ ≤ -∑ v : V, toSpin (s_next v) * localField G s_curr v :=
+          neg_le_neg (le_abs_self _)
+
+/-- From any initial state, the trajectory eventually has period dividing 2:
+a fixed point or a 2-cycle.
+
+The fixed-point disjunct is kept on purpose so the statement matches O5.
+It is redundant: a fixed point at time `n` already satisfies
+`(step G)^[n+k+2] s0 = (step G)^[n+k] s0` for every `k`, so the first
+disjunct implies the second. -/
 theorem period_at_most_2 (G : SimpleGraph V) [Fintype V] [DecidableRel G.Adj] [DecidableEq V]
     (s0 : State V) :
     ∃ n : ℕ, isFixedPoint G ((step G)^[n] s0) ∨
              (∀ k : ℕ, (step G)^[n+k+2] s0 = (step G)^[n+k] s0) := by
   classical
-  -- Define the energy sequence
-  let E : ℕ → ℤ := fun t => energy G ((step G)^[t] s0) ((step G)^[t+1] s0)
-  
-  -- Energy is bounded below
-  let bound := Finset.univ.sum (fun v : V => 2 * (G.neighborFinset v).card + 1)
-  have h_bounded : ∀ t, -(bound : ℤ) ≤ E t := by
+  let E : ℕ → ℤ := fun t => energy G ((step G)^[t] s0) ((step G)^[t + 1] s0)
+  let B : ℤ := ∑ v : V, (2 * (G.neighborFinset v).card + 1 : ℤ)
+  have h_bound : ∀ t, -B ≤ E t := by
     intro t
-    have h_abs := energy_bounded G ((step G)^[t] s0) ((step G)^[t+1] s0)
-    have h1 : |E t| ≤ (bound : ℤ) := by
-      have : E t = energy G ((step G)^[t] s0) ((step G)^[t+1] s0) := rfl
-      rw [this]
-      exact h_abs
-    linarith [neg_abs_le (E t)]
-  
-  -- Energy strictly decreases when s(t+2) ≠ s(t)
-  have h_energy_dec : ∀ t, (step G)^[t+2] s0 ≠ (step G)^[t] s0 → E t - E (t+1) >= 2 := by
-    intro t h_neq
-    have h_diff := energy_difference G s0 t
-    -- When s_{t+2} ≠ s_t, at least one vertex v has s_{t+2} v ≠ s_t v
-    have : ∃ v, (step G)^[t+2] s0 v ≠ (step G)^[t] s0 v := by
-      by_contra h_contra
-      push_neg at h_contra
-      apply h_neq
-      funext v
-      exact h_contra v
-    obtain ⟨v, hv⟩ := this
-    have h_term := energy_decrease_term G ((step G)^[t] s0) ((step G)^[t+1] s0) ((step G)^[t+2] s0) v rfl rfl hv
-    -- By the difference formula: E(t+1) - E(t) = -sum_v (...)
-    -- So E(t) - E(t+1) = sum_v (...)
-    -- Each term for v with different labels contributes >= 2
-    -- Each term is 0 when labels are same, >= 2 when different
-    have h_terms_nonneg : ∀ w, - (toSpin ((step G)^[t+2] s0 w) - toSpin ((step G)^[t] s0 w)) * localField G ((step G)^[t+1] s0) w >= 0 := by
-      intro w
-      by_cases hw : (step G)^[t+2] s0 w = (step G)^[t] s0 w
-      · simp [hw]
-      · exact Int.le_of_lt (Int.add_one_le_iff.mp (energy_decrease_term G ((step G)^[t] s0) ((step G)^[t+1] s0) ((step G)^[t+2] s0) w rfl rfl hw))
-    calc E t - E (t+1)
-      _ = - (E (t+1) - E t) := by ring
-      _ = - (- Finset.univ.sum (fun w => (toSpin ((step G)^[t+2] s0 w) - toSpin ((step G)^[t] s0 w)) * localField G ((step G)^[t+1] s0) w)) := by rw [← h_diff]
-      _ = Finset.univ.sum (fun w => - (toSpin ((step G)^[t+2] s0 w) - toSpin ((step G)^[t] s0 w)) * localField G ((step G)^[t+1] s0) w) := by simp [Finset.sum_neg_distrib]; ring_nf
-      _ ≥ - (toSpin ((step G)^[t+2] s0 v) - toSpin ((step G)^[t] s0 v)) * localField G ((step G)^[t+1] s0) v := by
-          -- The sum is >= the v term since all other terms are >= 0
-          have := Finset.single_le_sum (fun w _ => h_terms_nonneg w) (Finset.mem_univ v)
-          exact this
-      _ >= 2 := h_term
-  
-  -- If energy never stabilizes, it decreases without bound, contradicting boundedness
-  by_cases h_exists : ∃ n, ∀ k, (step G)^[n+k+2] s0 = (step G)^[n+k] s0
-  · obtain ⟨n, hn⟩ := h_exists
-    use n
-    right
-    exact hn
-  · -- No such n exists, so for all n, energy decreases at some point after n
-    push_neg at h_exists
-    -- Build a strictly decreasing subsequence by induction
-    let f : ℕ → ℕ := fun i =>
-      Nat.find (⟨0, h_exists i⟩ : ∃ k, (step G)^[i+k+2] s0 ≠ (step G)^[i+k] s0)
-    -- At each step i, energy decreases by at least 2 at time i + f(i)
-    have h_dec_at : ∀ i, E (i + f i) - E (i + f i + 1) >= 2 := by
-      intro i
-      exact h_energy_dec (i + f i) (Nat.find_spec (⟨0, h_exists i⟩ : ∃ k, (step G)^[i+k+2] s0 ≠ (step G)^[i+k] s0))
-    -- This means E decreases without bound
-    have : ∀ N : ℕ, ∃ t, E t < E 0 - 2 * N := by
-      intro N
-      induction N with
-      | zero => use 0; omega
-      | succ N ih =>
-        obtain ⟨t, ht⟩ := ih
-        use t + f t + 1
-        have := h_dec_at t
-        omega
-    -- But E is bounded below by -bound, so for large enough N, we get a contradiction
-    obtain ⟨t, ht⟩ := this (Int.toNat (E 0 + bound + 1))
-    have h1 := h_bounded t
-    have h2 := h_bounded 0
+    simpa [E, B] using energy_lower_bound G ((step G)^[t] s0) ((step G)^[t + 1] s0)
+  have h_step_succ : ∀ t, (step G)^[t + 1] s0 = step G ((step G)^[t] s0) := by
+    intro t
+    rw [Function.iterate_succ_apply']
+  have h_drop_sum : ∀ t,
+      E t - E (t + 1) =
+        ∑ v : V, (toSpin ((step G)^[t + 2] s0 v) - toSpin ((step G)^[t] s0 v)) *
+          localField G ((step G)^[t + 1] s0) v := by
+    intro t
+    have hdiff := energy_difference G ((step G)^[t] s0) ((step G)^[t + 1] s0) ((step G)^[t + 2] s0)
+    calc E t - E (t + 1)
+        _ = -(E (t + 1) - E t) := by omega
+        _ = -(- ∑ v : V, (toSpin ((step G)^[t + 2] s0 v) - toSpin ((step G)^[t] s0 v)) *
+              localField G ((step G)^[t + 1] s0) v) := by rw [hdiff]
+        _ = ∑ v : V, (toSpin ((step G)^[t + 2] s0 v) - toSpin ((step G)^[t] s0 v)) *
+              localField G ((step G)^[t + 1] s0) v := by simp
+  have h_nonneg_sum : ∀ t, 0 ≤ E t - E (t + 1) := by
+    intro t
+    rw [h_drop_sum t]
+    apply Finset.sum_nonneg
+    intro v _
+    exact energy_term_nonneg G ((step G)^[t] s0) ((step G)^[t + 1] s0) ((step G)^[t + 2] s0) v
+      (h_step_succ (t + 1))
+  have h_mono : ∀ t, E (t + 1) ≤ E t := by
+    intro t
+    have := h_nonneg_sum t
     omega
+  have h_strict : ∀ t, (step G)^[t + 2] s0 ≠ (step G)^[t] s0 → E t - E (t + 1) ≥ 2 := by
+    intro t hneq
+    have hex : ∃ v, (step G)^[t + 2] s0 v ≠ (step G)^[t] s0 v := by
+      by_contra h
+      apply hneq
+      funext v
+      by_contra hv
+      exact h ⟨v, hv⟩
+    obtain ⟨v, hv⟩ := hex
+    have hge := energy_decrease_term G ((step G)^[t] s0) ((step G)^[t + 1] s0)
+      ((step G)^[t + 2] s0) v (h_step_succ (t + 1)) hv
+    have hnn : ∀ w ∈ Finset.univ, 0 ≤
+        (toSpin ((step G)^[t + 2] s0 w) - toSpin ((step G)^[t] s0 w)) *
+          localField G ((step G)^[t + 1] s0) w := by
+      intro w _
+      exact energy_term_nonneg G _ _ _ w (h_step_succ (t + 1))
+    calc E t - E (t + 1)
+        _ = ∑ w : V, (toSpin ((step G)^[t + 2] s0 w) - toSpin ((step G)^[t] s0 w)) *
+              localField G ((step G)^[t + 1] s0) w := h_drop_sum t
+        _ ≥ (toSpin ((step G)^[t + 2] s0 v) - toSpin ((step G)^[t] s0 v)) *
+              localField G ((step G)^[t + 1] s0) v :=
+            Finset.single_le_sum hnn (Finset.mem_univ v)
+        _ ≥ 2 := hge
+  have h_shift_nonneg : ∀ t, 0 ≤ E t + B := fun t => by
+    have := h_bound t
+    omega
+  let μ : ℕ → ℕ := fun t => (E t + B).toNat
+  have hμ_mono : ∀ t, μ (t + 1) ≤ μ t := by
+    intro t
+    have hle : E (t + 1) + B ≤ E t + B := by
+      have := h_mono t
+      omega
+    have : ((E (t + 1) + B).toNat : ℤ) ≤ (E t + B).toNat := by
+      rw [Int.toNat_of_nonneg (h_shift_nonneg (t + 1)), Int.toNat_of_nonneg (h_shift_nonneg t)]
+      exact hle
+    exact Int.ofNat_le.mp this
+  let n : ℕ := Function.argmin μ
+  have hmin : ∀ t, μ n ≤ μ t := by
+    intro t
+    have hnot : ¬ μ t < μ n := by
+      simpa [n] using Function.not_lt_argmin μ t
+    omega
+  have hμ_le : ∀ k, μ (n + k) ≤ μ n := by
+    intro k
+    induction k with
+    | zero => exact le_rfl
+    | succ k ih =>
+      have hidx : n + (k + 1) = n + k + 1 := by omega
+      rw [hidx]
+      exact le_trans (hμ_mono (n + k)) ih
+  have hμ_eq : ∀ k, μ (n + k) = μ (n + k + 1) := by
+    intro k
+    have h1 : μ (n + k + 1) ≤ μ (n + k) := hμ_mono (n + k)
+    have h2 : μ n ≤ μ (n + k + 1) := hmin (n + k + 1)
+    have h3 : μ (n + k) ≤ μ n := hμ_le k
+    omega
+  have hE_eq : ∀ k, E (n + k) = E (n + k + 1) := by
+    intro k
+    have hμ := hμ_eq k
+    have ha := h_shift_nonneg (n + k)
+    have hb := h_shift_nonneg (n + k + 1)
+    have hcast : E (n + k) + B = E (n + k + 1) + B := by
+      have : ((E (n + k) + B).toNat : ℤ) = (E (n + k + 1) + B).toNat := by
+        simpa [μ] using congrArg (fun m : ℕ => (m : ℤ)) hμ
+      rw [Int.toNat_of_nonneg ha, Int.toNat_of_nonneg hb] at this
+      exact this
+    omega
+  use n
+  right
+  intro k
+  by_contra hneq
+  have hdrop := h_strict (n + k) hneq
+  have hEq := hE_eq k
+  omega
 
 /-- Corollary: unanimity is not inevitable.
     There exist a graph and an initial state such that unanimity never occurs. -/
@@ -569,6 +628,31 @@ theorem unanimity_not_inevitable :
       exact this v
   rw [h_fixed_state n]
   exact splitStatePath4_not_unanimous
+
+/-- The complete graph on two vertices. -/
+def edgeK2 : SimpleGraph (Fin 2) :=
+  SimpleGraph.fromRel fun i j => i ≠ j
+
+instance : DecidableRel edgeK2.Adj := fun i j => by
+  unfold edgeK2 SimpleGraph.fromRel
+  infer_instance
+
+/-- The state `(0, 1)` on `K₂`. -/
+def stateK2_01 : State (Fin 2)
+  | 0 => 0
+  | 1 => 1
+
+/-- On `K₂`, the state `(0, 1)` is not fixed: one step swaps the labels, and two steps return it. -/
+theorem k2_state01_period_exactly_two :
+    step edgeK2 stateK2_01 0 = 1 ∧
+    step edgeK2 stateK2_01 1 = 0 ∧
+    ¬ isFixedPoint edgeK2 stateK2_01 ∧
+    (step edgeK2)^[2] stateK2_01 = stateK2_01 := by
+  refine ⟨by decide, by decide, by decide, ?_⟩
+  funext v
+  match v with
+  | 0 => decide
+  | 1 => decide
 
 end MajorityImitation
 

@@ -18,7 +18,7 @@ Each `#guard_msgs` below pins the exact axioms a proved theorem depends on. If a
 proof, or anything it uses, becomes a placeholder, its list gains `sorryAx` and the
 build fails here. The same happens if a proof starts depending on any new axiom.
 
-The `proof_wanted` claim `period_at_most_2` is not audited (it is not proved).
+`period_at_most_2` and `k2_state01_period_exactly_two` are proved and audited below.
 -/
 
 @[expose] public section
@@ -44,5 +44,13 @@ open MajorityImitation
 /-- info: 'MajorityImitation.unanimity_not_inevitable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms unanimity_not_inevitable
+
+/-- info: 'MajorityImitation.period_at_most_2' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms period_at_most_2
+
+/-- info: 'MajorityImitation.k2_state01_period_exactly_two' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms k2_state01_period_exactly_two
 
 end
