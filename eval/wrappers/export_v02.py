@@ -482,10 +482,13 @@ if CONTRACT == "0.2.2" and RERUN_OF and not LABELED_RERUN_WRITTEN:
 def _merge_rerun_manifest(manifest):
     """Keep every trial already in this ensemble and append the labeled rerun."""
     path = os.path.join(OUT, "manifest.json")
-    if not os.path.exists(path):
-        return manifest
-    with open(path, encoding="utf-8") as fh:
-        old = json.load(fh)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            old = json.load(fh)
+    else:
+        # The first export can stop after the trial files and before manifest.json.
+        # Keep going so those files are recovered into this manifest.
+        old = {"trial_ids": [], "cells": []}
     ids = list(old.get("trial_ids") or [])
     for tid in manifest["trial_ids"]:
         if tid not in ids:

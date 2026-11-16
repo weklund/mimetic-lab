@@ -405,6 +405,36 @@ def test_recovered_trial_is_registered_in_its_cell(tmp_path):
     assert kept + "-rerun" in cell["trial_ids"]
 
 
+def test_missing_manifest_recovers_trial_files(tmp_path):
+    """A labeled rerun with no manifest.json still lists the trial files already on disk."""
+    repo = make_repo(tmp_path, "probe.py", TWO_SEEDS)
+    out = tmp_path / "ensemble"
+    first = run_export(
+        EXPORTER, repo, "probe.py", "probe", out,
+        extra=["--contract", "0.2.2", "--timeout-seconds", "30"],
+    )
+    assert first.returncode == 0, first.stderr
+    kept = "probe-g1.05-N5-vAC-s42"
+    other = "probe-g1.05-N5-vAC-s1042"
+    trials = out / "probe" / "trials"
+    before = {name: (trials / f"{name}.json").read_bytes() for name in (kept, other)}
+    (out / "probe" / "manifest.json").unlink()
+
+    rerun = run_export(
+        EXPORTER, repo, "probe.py", "probe", out,
+        extra=["--contract", "0.2.2", "--timeout-seconds", "30", "--rerun-of", kept],
+    )
+    assert rerun.returncode == 0, rerun.stderr
+    assert (trials / f"{kept}.json").read_bytes() == before[kept]
+    assert (trials / f"{other}.json").read_bytes() == before[other]
+    merged, _loaded = load_trials(out, "probe")
+    rerun_id = kept + "-rerun"
+    assert set(merged["trial_ids"]) == {kept, other, rerun_id}
+    cell = next(c for c in merged["cells"] if c["N"] == 5 and c["gamma"] == 1.05 and c["variant"] == "AC")
+    assert set(cell["trial_ids"]) == {kept, other, rerun_id}
+    assert cell["n"] == 3
+
+
 def test_second_labeled_rerun_does_not_overwrite_json_or_npz(tmp_path):
     """Refusing an existing labeled rerun leaves both the JSON and the NPZ unchanged."""
     repo = make_repo(tmp_path, "probe.py", PROBE)
