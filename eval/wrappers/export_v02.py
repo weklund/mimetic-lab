@@ -9,10 +9,30 @@ snapshot reads use side-effect-free official helpers (_alive_ids,
 _received_aggression_vector) or a verbatim copy of record_metrics' modal loop.
 
 Usage:
-  python3 export_v02.py <repo_dir> <script.py> <ensemble_id> <out_root> [--command "..."]
+  python3 export_v02.py <repo_dir> <script.py> <ensemble_id> <out_root> --source-sha <SHA> [--command "..."]
+  python3 export_v02.py <repo_dir> <script.py> <ensemble_id> <out_root> --source-sha <SHA> \\
+      --contract 0.2.2 --timeout-seconds S [--rerun-of <trial_id>]
+
+Default mode (no --contract, or --contract 0.2) writes contract_version "0.2".
+It does not pass a timeout into the official runner, and it does not add
+timeout_seconds, host, rerun_of, or exporter_sha256.
+
+--contract 0.2.2 requires --timeout-seconds S, a positive finite number of
+seconds. In that mode the manifest contract_version is "0.2.2". The manifest
+records exporter_sha256 of this file, read at run start, and records
+timeout_seconds, host (socket.gethostname()), and rerun_of. Every trial records
+those three fields too. rerun_of is null unless --rerun-of is set. S is passed
+through run_unanimity_triggered's own timeout_seconds argument. Capture, RNG,
+seeding, and array contents are unchanged.
+
+--rerun-of <trial_id> writes a labeled rerun. The original trial file is kept.
+The rerun is stored as <trial_id>-rerun.json with rerun_of set to <trial_id>.
+The script field stays the script name given on the command line. For an
+official Table 10 rerun that name is exp_small_n_viability.py.
+
 Writes <out_root>/<ensemble_id>/manifest.json and trials/<trial_id>.json.
 """
-import sys, os, json, math, inspect, time, datetime, platform, dataclasses, functools, importlib.util, argparse
+import sys, os, json, math, inspect, time, datetime, platform, dataclasses, functools, importlib.util, argparse, hashlib, socket
 from typing import Dict, List
 
 ap = argparse.ArgumentParser()
@@ -21,7 +41,23 @@ ap.add_argument("--command", default=" ".join(sys.argv))
 ap.add_argument("--source-sha", required=True)
 ap.add_argument("--npz", action="store_true",
                 help="offload series to trials/<trial_id>.npz (contract v0.2 NPZ offload, object layout)")
+ap.add_argument("--contract", default="0.2", choices=("0.2", "0.2.2"),
+                help="trace contract to write (default: 0.2)")
+ap.add_argument("--timeout-seconds", type=float, default=None,
+                help="required with --contract 0.2.2; passed to run_unanimity_triggered")
+ap.add_argument("--rerun-of", default=None, metavar="TRIAL_ID",
+                help="with --contract 0.2.2, write a labeled rerun of this trial_id")
 ARGS = ap.parse_args()
+
+if ARGS.contract != "0.2.2" and (ARGS.timeout_seconds is not None or ARGS.rerun_of is not None):
+    ap.error("--timeout-seconds and --rerun-of require --contract 0.2.2")
+if ARGS.contract == "0.2.2":
+    if ARGS.timeout_seconds is None:
+        ap.error("--contract 0.2.2 requires --timeout-seconds S")
+    if isinstance(ARGS.timeout_seconds, bool) or not math.isfinite(ARGS.timeout_seconds) or ARGS.timeout_seconds <= 0:
+        ap.error("--timeout-seconds must be a positive finite number")
+    if ARGS.rerun_of is not None and not str(ARGS.rerun_of).strip():
+        ap.error("--rerun-of requires a non-empty trial_id")
 
 REPO = os.path.abspath(ARGS.repo)
 sys.path.insert(0, REPO)
@@ -30,7 +66,21 @@ import numpy as np
 import networkx as nx
 import girard_2x2_v3 as G
 
-CONTRACT = "0.2"
+CONTRACT = ARGS.contract
+TIMEOUT_SECONDS = ARGS.timeout_seconds
+RERUN_OF = ARGS.rerun_of
+HOST = socket.gethostname() if CONTRACT == "0.2.2" else None
+LABELED_RERUN_WRITTEN = False
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+# Read at run start, before the official script runs.
+EXPORTER_SHA256 = _sha256_file(os.path.abspath(__file__)) if CONTRACT == "0.2.2" else None
 PAPER = "Black 2026, A Computational Test of Girard's Scapegoat Mechanism"
 DRAFT = "18"
 SOURCE_REPO = "https://github.com/maxwell-black/mimetic-desire-simulation"
@@ -142,7 +192,6 @@ def _check_finite(o, path="$"):
     elif isinstance(o, list):
         for i, v in enumerate(o): _check_finite(v, f"{path}[{i}]")
 
-import hashlib
 DIGESTS: Dict[str, str] = {}
 RERUNS: List[str] = []
 def _digest(d):
@@ -170,6 +219,17 @@ def _write_npz(tid, series):
     np.savez_compressed(os.path.join(OUT, "trials", tid + ".npz"), **arrs)
 
 def write_trial(d):
+    global LABELED_RERUN_WRITTEN
+    labeled = False
+    if CONTRACT == "0.2.2" and RERUN_OF:
+        natural_id = d["trial_id"]
+        if natural_id == RERUN_OF:
+            # New trial_id so the incomplete trial file is not opened for writing.
+            d["rerun_of"] = RERUN_OF
+            d["trial_id"] = natural_id + "-rerun"
+            labeled = True
+        elif os.path.exists(os.path.join(OUT, "trials", natural_id + ".json")):
+            return
     tid = d["trial_id"]
     _check_finite(d)
     dg = _digest(d)
@@ -182,17 +242,26 @@ def write_trial(d):
         RERUNS.append(tid)
         return
     DIGESTS[tid] = dg
+    if labeled and tid == RERUN_OF:
+        raise SystemExit("labeled rerun must not use the original trial_id")
+    dest_json = os.path.join(OUT, "trials", tid + ".json")
+    # Refuse before either file is opened for writing. The NPZ is the series
+    # the existing JSON names, so writing it first would change that rerun.
+    if labeled and os.path.exists(dest_json):
+        raise SystemExit(f"refusing to overwrite labeled rerun {dest_json}")
     if ARGS.npz:
         _write_npz(tid, d["series"])
         d = dict(d); d["series"] = {"$npz": tid + ".npz"}
-    with open(os.path.join(OUT, "trials", tid + ".json"), "w", encoding="utf-8") as f:
+    with open(dest_json, "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
     TRIAL_IDS.append(tid)
     CELLS.setdefault((d["N"], d["gamma"], d["variant"]), []).append(tid)
+    if labeled:
+        LABELED_RERUN_WRITTEN = True
 
 def base_meta(sim, variant, expulsion_mode, steps_completed, timed_out, started_at, theta=None, cooldown=None):
     cfg = sim.cfg
-    return {
+    meta = {
         "contract_version": CONTRACT, "trial_id": make_trial_id(cfg.salience_exponent, cfg.n_agents, variant, cfg.seed),
         "ensemble_id": ENS, "script": ARGS.script, "source_repo": SOURCE_REPO, "source_sha": ARGS.source_sha,
         "paper": PAPER, "draft": DRAFT, "variant": variant, "source_mode": sim.source, "spread_mode": sim.spread,
@@ -205,6 +274,16 @@ def base_meta(sim, variant, expulsion_mode, steps_completed, timed_out, started_
         "timed_out": bool(timed_out), "python_version": PYVER, "packages": PACKAGES, "command": ARGS.command,
         "started_at": started_at, "ended_at": now(),
     }
+    if CONTRACT == "0.2.2":
+        ordered = {}
+        for key, value in meta.items():
+            ordered[key] = value
+            if key == "timed_out":
+                ordered["timeout_seconds"] = TIMEOUT_SECONDS
+                ordered["host"] = HOST
+                ordered["rerun_of"] = None
+        meta = ordered
+    return meta
 
 # ---------------- run (record_metrics path: Tables 2, 2b, 1, ...) ----------------
 _orig_run = G.GirardSimulation.run
@@ -340,7 +419,13 @@ if S is not None:
     def run_unanimity_triggered(*a, **k):
         c = _new_collector(); _CTX["active"] = c
         try:
-            res = _orig_rut(*a, **k)
+            if CONTRACT == "0.2.2":
+                # The official argument, not a copied loop. Default mode does not take this branch.
+                call = inspect.signature(_orig_rut).bind(*a, **k)
+                call.arguments["timeout_seconds"] = TIMEOUT_SECONDS
+                res = _orig_rut(*call.args, **call.kwargs)
+            else:
+                res = _orig_rut(*a, **k)
         finally:
             _CTX["active"] = None
         c.pop("pending", None)
@@ -388,7 +473,84 @@ if S is not None and getattr(mod, "run_unanimity_triggered", None) is _orig_rut:
 mod.main()
 ENDED = now()
 
+if CONTRACT == "0.2.2" and RERUN_OF and not LABELED_RERUN_WRITTEN:
+    raise SystemExit(
+        f"--rerun-of {RERUN_OF} matched no trial emitted by {ARGS.script}; original trial files were left in place"
+    )
+
 # ---------------------------------------------------------------------------
+def _merge_rerun_manifest(manifest):
+    """Keep every trial already in this ensemble and append the labeled rerun."""
+    path = os.path.join(OUT, "manifest.json")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            old = json.load(fh)
+    else:
+        # The first export can stop after the trial files and before manifest.json.
+        # Keep going so those files are recovered into this manifest.
+        old = {"trial_ids": [], "cells": []}
+    ids = list(old.get("trial_ids") or [])
+    for tid in manifest["trial_ids"]:
+        if tid not in ids:
+            ids.append(tid)
+    # Trial files left on disk by an interrupted export are not in the old
+    # manifest. Remember them, then register each one in its cell below.
+    recovered = []
+    tdir = os.path.join(OUT, "trials")
+    if os.path.isdir(tdir):
+        known = set(ids)
+        for name in sorted(os.listdir(tdir)):
+            if name.endswith(".json") and name[:-5] not in known:
+                recovered.append(name[:-5])
+
+    def cell_key(cell):
+        return (cell.get("N"), cell.get("gamma"), cell.get("variant"))
+
+    merged = {}
+    order = []
+    for cell in list(old.get("cells") or []) + list(manifest["cells"]):
+        key = cell_key(cell)
+        if key not in merged:
+            merged[key] = dict(cell)
+            merged[key]["trial_ids"] = list(cell.get("trial_ids") or [])
+            order.append(key)
+        else:
+            dest = merged[key]
+            for tid in cell.get("trial_ids") or []:
+                if tid not in dest["trial_ids"]:
+                    dest["trial_ids"].append(tid)
+    for stem in recovered:
+        _register_recovered_trial(stem, merged, order)
+        if stem not in ids:
+            ids.append(stem)
+    for key in order:
+        merged[key]["n"] = len(merged[key]["trial_ids"])
+    manifest["trial_ids"] = ids
+    manifest["cells"] = [merged[key] for key in order]
+    return manifest
+
+def _register_recovered_trial(stem, merged, order):
+    """Add a trial file that was missing from the manifest into its cell."""
+    path = os.path.join(OUT, "trials", stem + ".json")
+    with open(path, encoding="utf-8") as fh:
+        trial = json.load(fh)
+    if not isinstance(trial, dict):
+        raise SystemExit(f"recovered trial {stem} is not a JSON object")
+    for key in ("N", "gamma", "variant"):
+        if key not in trial:
+            raise SystemExit(f"recovered trial {stem} is missing {key}")
+    cell_key = (trial["N"], trial["gamma"], trial["variant"])
+    if cell_key not in merged:
+        merged[cell_key] = {
+            "table": None, "N": trial["N"], "gamma": trial["gamma"], "variant": trial["variant"],
+            "n": 0, "claimed_k": None, "claimed_rate": None, "claimed_median_t95": None,
+            "trial_ids": [],
+        }
+        order.append(cell_key)
+    dest = merged[cell_key]
+    if stem not in dest["trial_ids"]:
+        dest["trial_ids"].append(stem)
+
 CLAIMS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "claims_v02.json")
 claims = json.load(open(CLAIMS_PATH)).get(ENS, {}) if os.path.exists(CLAIMS_PATH) else {}
 cells = []
@@ -401,8 +563,17 @@ manifest = {"contract_version": CONTRACT, "ensemble_id": ENS, "paper": PAPER, "d
             "source_repo": SOURCE_REPO, "source_sha": ARGS.source_sha, "script": ARGS.script,
             "python_version": PYVER, "packages": PACKAGES, "command": ARGS.command,
             "started_at": STARTED, "ended_at": ENDED, "trial_ids": TRIAL_IDS, "cells": cells}
+if CONTRACT == "0.2.2":
+    manifest["exporter_sha256"] = EXPORTER_SHA256
+    manifest["timeout_seconds"] = TIMEOUT_SECONDS
+    manifest["host"] = HOST
+    manifest["rerun_of"] = RERUN_OF
+if CONTRACT == "0.2.2" and RERUN_OF:
+    manifest = _merge_rerun_manifest(manifest)
 _check_finite(manifest)
 with open(os.path.join(OUT, "manifest.json"), "w", encoding="utf-8") as f:
     json.dump(manifest, f, ensure_ascii=False, allow_nan=False, indent=1)
 print(f"[export_v02] wrote {len(TRIAL_IDS)} trials to {OUT}; identical official reruns skipped: {len(RERUNS)}",
       file=sys.stderr)
+if CONTRACT == "0.2.2" and RERUN_OF:
+    print(f"[export_v02] labeled rerun of {RERUN_OF}", file=sys.stderr)
