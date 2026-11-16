@@ -244,12 +244,14 @@ def write_trial(d):
     DIGESTS[tid] = dg
     if labeled and tid == RERUN_OF:
         raise SystemExit("labeled rerun must not use the original trial_id")
+    dest_json = os.path.join(OUT, "trials", tid + ".json")
+    # Refuse before either file is opened for writing. The NPZ is the series
+    # the existing JSON names, so writing it first would change that rerun.
+    if labeled and os.path.exists(dest_json):
+        raise SystemExit(f"refusing to overwrite labeled rerun {dest_json}")
     if ARGS.npz:
         _write_npz(tid, d["series"])
         d = dict(d); d["series"] = {"$npz": tid + ".npz"}
-    dest_json = os.path.join(OUT, "trials", tid + ".json")
-    if labeled and os.path.exists(dest_json):
-        raise SystemExit(f"refusing to overwrite labeled rerun {dest_json}")
     with open(dest_json, "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
     TRIAL_IDS.append(tid)
@@ -488,12 +490,15 @@ def _merge_rerun_manifest(manifest):
     for tid in manifest["trial_ids"]:
         if tid not in ids:
             ids.append(tid)
+    # Trial files left on disk by an interrupted export are not in the old
+    # manifest. Remember them, then register each one in its cell below.
+    recovered = []
     tdir = os.path.join(OUT, "trials")
     if os.path.isdir(tdir):
+        known = set(ids)
         for name in sorted(os.listdir(tdir)):
-            if name.endswith(".json") and name[:-5] not in ids:
-                ids.append(name[:-5])
-    manifest["trial_ids"] = ids
+            if name.endswith(".json") and name[:-5] not in known:
+                recovered.append(name[:-5])
 
     def cell_key(cell):
         return (cell.get("N"), cell.get("gamma"), cell.get("variant"))
@@ -511,10 +516,37 @@ def _merge_rerun_manifest(manifest):
             for tid in cell.get("trial_ids") or []:
                 if tid not in dest["trial_ids"]:
                     dest["trial_ids"].append(tid)
+    for stem in recovered:
+        _register_recovered_trial(stem, merged, order)
+        if stem not in ids:
+            ids.append(stem)
     for key in order:
         merged[key]["n"] = len(merged[key]["trial_ids"])
+    manifest["trial_ids"] = ids
     manifest["cells"] = [merged[key] for key in order]
     return manifest
+
+def _register_recovered_trial(stem, merged, order):
+    """Add a trial file that was missing from the manifest into its cell."""
+    path = os.path.join(OUT, "trials", stem + ".json")
+    with open(path, encoding="utf-8") as fh:
+        trial = json.load(fh)
+    if not isinstance(trial, dict):
+        raise SystemExit(f"recovered trial {stem} is not a JSON object")
+    for key in ("N", "gamma", "variant"):
+        if key not in trial:
+            raise SystemExit(f"recovered trial {stem} is missing {key}")
+    cell_key = (trial["N"], trial["gamma"], trial["variant"])
+    if cell_key not in merged:
+        merged[cell_key] = {
+            "table": None, "N": trial["N"], "gamma": trial["gamma"], "variant": trial["variant"],
+            "n": 0, "claimed_k": None, "claimed_rate": None, "claimed_median_t95": None,
+            "trial_ids": [],
+        }
+        order.append(cell_key)
+    dest = merged[cell_key]
+    if stem not in dest["trial_ids"]:
+        dest["trial_ids"].append(stem)
 
 CLAIMS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "claims_v02.json")
 claims = json.load(open(CLAIMS_PATH)).get(ENS, {}) if os.path.exists(CLAIMS_PATH) else {}

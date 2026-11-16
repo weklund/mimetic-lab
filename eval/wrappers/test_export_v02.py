@@ -361,3 +361,72 @@ def test_forced_timeout_and_labeled_rerun(tmp_path):
     assert cell["n_incomplete"] == 0
     assert cell["determinism_failures"] == 0
     assert cell["n_complete"] == 1
+
+
+TWO_SEEDS = textwrap.dedent("""\
+    def main():
+        from small_n_utils import run_unanimity_triggered
+        run_unanimity_triggered(5, 1.05, "AC", n_steps=8, seed=42)
+        run_unanimity_triggered(5, 1.05, "AC", n_steps=8, seed=1042)
+    """)
+
+
+def test_recovered_trial_is_registered_in_its_cell(tmp_path):
+    """A trial file missing from the manifest is added to trial_ids and to its cell."""
+    repo = make_repo(tmp_path, "probe.py", TWO_SEEDS)
+    out = tmp_path / "ensemble"
+    first = run_export(
+        EXPORTER, repo, "probe.py", "probe", out,
+        extra=["--contract", "0.2.2", "--timeout-seconds", "30"],
+    )
+    assert first.returncode == 0, first.stderr
+    kept = "probe-g1.05-N5-vAC-s42"
+    dropped = "probe-g1.05-N5-vAC-s1042"
+    manifest_path = out / "probe" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["trial_ids"] = [tid for tid in manifest["trial_ids"] if tid != dropped]
+    for cell in manifest["cells"]:
+        cell["trial_ids"] = [tid for tid in cell["trial_ids"] if tid != dropped]
+        cell["n"] = len(cell["trial_ids"])
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert (out / "probe" / "trials" / f"{dropped}.json").is_file()
+
+    rerun = run_export(
+        EXPORTER, repo, "probe.py", "probe", out,
+        extra=["--contract", "0.2.2", "--timeout-seconds", "30", "--rerun-of", kept],
+    )
+    assert rerun.returncode == 0, rerun.stderr
+    merged, _trials = load_trials(out, "probe")
+    assert dropped in merged["trial_ids"]
+    cell = next(c for c in merged["cells"] if c["N"] == 5 and c["gamma"] == 1.05 and c["variant"] == "AC")
+    assert dropped in cell["trial_ids"]
+    assert cell["trial_ids"].count(dropped) == 1
+    assert cell["n"] == len(cell["trial_ids"])
+    assert kept + "-rerun" in cell["trial_ids"]
+
+
+def test_second_labeled_rerun_does_not_overwrite_json_or_npz(tmp_path):
+    """Refusing an existing labeled rerun leaves both the JSON and the NPZ unchanged."""
+    repo = make_repo(tmp_path, "probe.py", PROBE)
+    out = tmp_path / "ensemble"
+    extra = ["--contract", "0.2.2", "--timeout-seconds", "30", "--npz"]
+    first = run_export(EXPORTER, repo, "probe.py", "probe", out, extra=extra)
+    assert first.returncode == 0, first.stderr
+    tid = "probe-g1.05-N5-vAC-s42"
+    rerun_extra = extra + ["--rerun-of", tid]
+    second = run_export(EXPORTER, repo, "probe.py", "probe", out, extra=rerun_extra)
+    assert second.returncode == 0, second.stderr
+    trials = out / "probe" / "trials"
+    paths = [
+        trials / f"{tid}.json",
+        trials / f"{tid}.npz",
+        trials / f"{tid}-rerun.json",
+        trials / f"{tid}-rerun.npz",
+    ]
+    assert all(path.is_file() for path in paths)
+    before = {path: path.read_bytes() for path in paths}
+    third = run_export(EXPORTER, repo, "probe.py", "probe", out, extra=rerun_extra)
+    assert third.returncode != 0
+    assert "refusing to overwrite" in third.stderr
+    after = {path: path.read_bytes() for path in paths}
+    assert after == before
